@@ -70,10 +70,16 @@ export async function getChatResponseStream(
             // "model": "openai/gpt-3.5-turbo",
             // "model": "cohere/command-r-plus",
             // "model": "anthropic/claude-3.5-sonnet:beta",
-            "model": "google/gemini-2.0-flash-exp:free",
+            // "model": "google/gemini-2.0-flash-exp:free", // removed from OpenRouter
+            "model": "openai/gpt-oss-120b:nitro",
+            // gpt-oss is a reasoning model and its reasoning tokens count against
+            // max_tokens. Keep reasoning effort low and give the reply some
+            // headroom so the spoken answer isn't truncated by the thinking budget.
+            // (reasoning tokens are filtered out of the stream below.)
+            "reasoning": { "effort": "low" },
             "messages": messages,
             "temperature": 0.7,
-            "max_tokens": 200,
+            "max_tokens": 512,
             "stream": true,
           })
         });
@@ -126,7 +132,11 @@ export async function getChatResponseStream(
                 messages.forEach((message) => {
                   const content = message.choices[0].delta.content;
 
-                  controller.enqueue(content);
+                  // Skip deltas without content (e.g. role-only or reasoning
+                  // deltas) so we don't enqueue undefined into the stream.
+                  if (content) {
+                    controller.enqueue(content);
+                  }
                 });
               } catch (error) {
                 // log the messages
