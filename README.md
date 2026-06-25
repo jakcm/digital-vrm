@@ -45,8 +45,85 @@ npm run dev
 | LLM 对话 | [OpenRouter](https://openrouter.ai/)（多模型） |
 | 唇同步 | Viseme 驱动（词级别时间戳） |
 | 语音输入 | [Web Speech API](https://developer.mozilla.org/zh-CN/docs/Web/API/Web_Speech_API) |
-| 框架 | Next.js (TypeScript) |
-| 部署 | GitHub Pages |
+| 框架 | Next.js 13.2.4 (TypeScript, Pages Router, 静态导出) |
+| 部署 | GitHub Pages (`gh-pages` 分支) |
+
+## 项目架构
+
+### 目录结构
+
+```
+src/
+├── pages/
+│   ├── index.tsx          # 主页面，管理所有状态（systemPrompt, openRouterKey, chatLog 等）
+│   ├── _app.tsx           # Next.js App 包装
+│   ├── _document.tsx      # HTML 文档模板
+│   └── api/               # API Routes（静态导出模式下不可用，仅本地开发用）
+│       ├── chat.ts         #   Chat API（未使用，已注释）
+│       ├── tts.ts          #   TTS 代理（未使用）
+│       └── refresh-token.ts#   Restream token 刷新
+├── components/
+│   ├── messageInput.tsx       # 底部消息输入栏（含麦克风、文本输入、发送按钮）
+│   ├── messageInputContainer.tsx # 消息输入容器（管理语音识别 + 发送逻辑）
+│   ├── settings.tsx           # Settings 面板（API Key、语音选择、系统提示词、背景图、版权信息）
+│   ├── menu.tsx               # 顶部菜单（Settings / Conversation Log 按钮、VRM 文件上传）
+│   ├── introduction.tsx       # 初始介绍弹窗
+│   ├── vrmViewer.tsx          # VRM Canvas 渲染容器
+│   ├── chatLog.tsx            # 对话历史展示
+│   ├── assistantText.tsx      # AI 回复气泡
+│   ├── githubLink.tsx         # GitHub 链接
+│   ├── iconButton.tsx         # 通用图标按钮
+│   ├── textButton.tsx         # 通用文本按钮
+│   ├── link.tsx               # 通用链接
+│   ├── meta.tsx               # SEO meta 标签
+│   └── restreamTokens.tsx     # Restream 直播聊天集成
+├── features/
+│   ├── chat/
+│   │   └── openAiChat.ts      # OpenRouter API 流式调用 + SSE 解析
+│   ├── messages/
+│   │   ├── messages.ts        # Message 类型定义 + Screenplay 类型 + 情绪解析
+│   │   ├── speakCharacter.ts  # 语音合成协调（Edge TTS → 播放 → 唇同步）
+│   │   └── messageMiddleOut.ts# 消息压缩中间件（超长对话截断）
+│   ├── vrmViewer/
+│   │   └── viewerContext.ts   # VRM Viewer Context + Three.js 场景管理
+│   ├── edgeTts/
+│   │   └── edgeTts.ts         # Edge TTS 语音列表 + SSML 生成 + 音频请求
+│   ├── emoteController/        # 表情控制器
+│   ├── lipSync/                # 唇同步（Viseme 映射）
+│   ├── speech/                 # 语音识别（Web Speech API）
+│   └── constants/
+│       └── systemPromptConstants.ts # 默认系统提示词（数字人性格设定）
+├── services/
+│   └── websocketService.ts    # Restream WebSocket 服务
+├── lib/                        # 工具库
+├── styles/                     # 全局样式
+└── utils/
+    └── buildUrl.ts             # basePath 感知的 URL 构建工具
+```
+
+### 核心数据流
+
+```
+用户输入文字/语音
+  → MessageInputContainer (handleSendChat)
+  → index.tsx (handleSendChat)
+    → MessageMiddleOut.process()          # 超长对话截断
+    → openAiChat.getChatResponseStream()   # OpenRouter SSE 流式请求
+    → 逐句读取流式响应
+      → textsToScreenplay()                # 情绪标签解析 [happy]文本 → {expression, talk}
+      → speakCharacter()                   # Edge TTS 合成 → 音频播放
+        → VRM Viewer.speak()               # 唇同步 + 表情动画
+      → setAssistantMessage()              # 更新 UI 气泡
+    → setChatLog()                         # 持久化到 localStorage
+```
+
+### 关键配置文件
+
+| 文件 | 作用 |
+|:----|:-----|
+| `next.config.js` | `basePath` / `assetPrefix` / `publicRuntimeConfig.root` 均读取 `process.env.BASE_PATH` |
+| `package.json` | Next.js 13.2.4，构建脚本 `build` / `export` |
+| `tsconfig.json` | TypeScript 配置，路径别名 `@/` → `src/` |
 
 ## 重要经验与避坑 🚧
 
@@ -82,15 +159,34 @@ npx gh-pages -d out --branch gh-pages --dotfiles
 ```
 
 #### 🔥 不用 GitHub Actions
-原项目带的 `.github/workflows/nextjs.yml` 使用已废弃的 `actions/upload-artifact@v3`，会报错。建议直接本地构建后推送到 `gh-pages` 分支：
-
-```bash
-npm run build && npm run export
-npx gh-pages -d out --branch gh-pages
-```
+原项目带的 `.github/workflows/nextjs.yml` 使用已废弃的 `actions/upload-artifact@v3`，会报错。建议直接本地构建后推送到 `gh-pages` 分支。
 
 #### 🔥 大文件注意
 VRM 模型文件通常 10-20MB，`npx gh-pages` 上传和 GitHub Pages 首次构建需要时间（1-3 分钟），期间返回 404 是正常的。
+
+#### 🔥 `BASE_PATH` 必须在 build 和 export 两阶段都设置
+`next.config.js` 中 `basePath`、`assetPrefix`、`publicRuntimeConfig.root` 均读取 `process.env.BASE_PATH`。如果构建时不设此环境变量，生成的 HTML 会引用 `/_next/...` 而非 `/digital-vrm/_next/...`，导致 GitHub Pages 上所有 JS/CSS 返回 404，React 无法 hydrate，页面表现为空白或 "Application error"。
+
+**正确的完整部署流程：**
+
+```bash
+# 1. 构建（必须带 BASE_PATH）
+BASE_PATH=/digital-vrm npx next build
+
+# 2. 静态导出（也必须带 BASE_PATH）
+BASE_PATH=/digital-vrm npx next export
+
+# 3. 添加 .nojekyll（防止 Jekyll 覆盖）
+touch out/.nojekyll
+
+# 4. 部署到 gh-pages 分支
+npx gh-pages -d out -b gh-pages --dotfiles
+
+# 5. 等待 CDN 刷新（约 30 秒）
+sleep 30
+```
+
+> ⚠️ 裸 `npm run build && npm run export`（不带 `BASE_PATH`）会导致部署后页面白屏。
 
 ### 7. OpenRouter 已内置，无需额外修改
 zoan37/ChatVRM 的 `src/features/chat/openAiChat.ts` 已经内置了 OpenRouter 的流式调用，包括：
