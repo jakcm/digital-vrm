@@ -6,6 +6,7 @@ import { VRMLookAtSmootherLoaderPlugin } from "@/lib/VRMLookAtSmootherLoaderPlug
 import { LipSync } from "../lipSync/lipSync";
 import { EmoteController } from "../emoteController/emoteController";
 import { Screenplay } from "../messages/messages";
+import { VisemeInfo } from "../edgeTts/edgeTts";
 
 /**
  * 3Dキャラクターを管理するクラス
@@ -57,8 +58,6 @@ export class Model {
 
   /**
    * VRMアニメーションを読み込む
-   *
-   * https://github.com/vrm-c/vrm-specification/blob/master/specification/VRMC_vrm_animation-1.0/README.ja.md
    */
   public async loadAnimation(vrmAnimation: VRMAnimation): Promise<void> {
     const { vrm, mixer } = this;
@@ -73,8 +72,13 @@ export class Model {
 
   /**
    * 音声を再生し、リップシンクを行う
+   * 支持 viseme 序列驱动的精准唇同步
    */
-  public async speak(buffer: ArrayBuffer | null, screenplay: Screenplay) {
+  public async speak(
+    buffer: ArrayBuffer | null,
+    screenplay: Screenplay,
+    visemes?: VisemeInfo[]
+  ) {
     // prevent flickering of avatar expression
     if (this.prevPlayedEmotion !== screenplay.expression) {
       this.emoteController?.playEmotion(screenplay.expression);
@@ -83,6 +87,16 @@ export class Model {
 
     if (!buffer) {
       return;
+    }
+
+    // 如果有 viseme 序列，传给 lipSync
+    if (visemes && visemes.length > 0) {
+      const visemeSequence = visemes.map(v => ({
+        viseme: mapWordToViseme(v.word),
+        startTime: v.offset,
+        endTime: v.offset + v.duration,
+      }));
+      this._lipSync?.setVisemeSequence(visemeSequence);
     }
 
     await new Promise((resolve) => {
@@ -94,18 +108,23 @@ export class Model {
 
   public update(delta: number): void {
     if (this._lipSync) {
-      const { volume } = this._lipSync.update();
+      const { volume, viseme, visemeWeight } = this._lipSync.update();
 
-      // variable for expression controller
-      let expression = this.vrm?.expressionManager?.getExpression("JawOpen");
-      if (expression) {
-        // handle Perfect Sync standard
-        
-        // @ts-ignore
-        this.emoteController?.lipSync("JawOpen", volume);
-        // this.emoteController?.lipSync("MouthStretch", 0.4 * volume);
+      if (viseme && visemeWeight && visemeWeight > 0) {
+        // 使用 viseme 驱动的精准唇同步
+        const vrmViseme = mapToVRMViseme(viseme);
+        if (vrmViseme) {
+          this.emoteController?.lipSync(vrmViseme as any, visemeWeight);
+        }
       } else {
-        this.emoteController?.lipSync("aa", volume);
+        // 回退到音量驱动的简单唇同步
+        let expression = this.vrm?.expressionManager?.getExpression("JawOpen");
+        if (expression) {
+          // @ts-ignore
+          this.emoteController?.lipSync("JawOpen", volume);
+        } else {
+          this.emoteController?.lipSync("aa" as any, volume);
+        }
       }
     }
 
@@ -113,4 +132,58 @@ export class Model {
     this.mixer?.update(delta);
     this.vrm?.update(delta);
   }
+}
+
+/**
+ * 将单词映射到 viseme 名称
+ * 基于 Oculus 15 viseme 标准
+ */
+function mapWordToViseme(word: string): string {
+  const firstChar = word.charAt(0).toLowerCase();
+  const visemeMap: Record<string, string> = {
+    'a': 'aa',
+    'e': 'ee',
+    'i': 'ih',
+    'o': 'oh',
+    'u': 'ou',
+    'b': 'PP',
+    'p': 'PP',
+    'm': 'PP',
+    'f': 'FF',
+    'v': 'FF',
+    't': 'DD',
+    'd': 'DD',
+    'k': 'kk',
+    'g': 'kk',
+    's': 'SS',
+    'z': 'SS',
+    'c': 'SS',
+    'n': 'nn',
+    'l': 'nn',
+    'r': 'RR',
+  };
+  return visemeMap[firstChar] || "sil";
+}
+
+/**
+ * 将通用 viseme 名称映射到 VRM blend shape 名称
+ */
+function mapToVRMViseme(viseme: string): string | null {
+  const vrmMap: Record<string, string> = {
+    aa: "aa",
+    ee: "E",
+    ih: "ih",
+    oh: "oh",
+    ou: "ou",
+    PP: "PP",
+    FF: "FF",
+    DD: "DD",
+    kk: "kk",
+    CH: "CH",
+    SS: "SS",
+    nn: "nn",
+    RR: "RR",
+    sil: "neutral",
+  };
+  return vrmMap[viseme] || null;
 }

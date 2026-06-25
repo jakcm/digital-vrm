@@ -1,5 +1,4 @@
-import { VRMExpression, VRMExpressionPresetName } from "@pixiv/three-vrm";
-import { KoeiroParam } from "../constants/koeiroParam";
+import { VRMExpressionPresetName } from "@pixiv/three-vrm";
 
 // ChatGPT API
 export type Message = {
@@ -24,7 +23,11 @@ export type Talk = {
   message: string;
 };
 
-const emotions = ["neutral", "happy", "angry", "sad", "relaxed"] as const;
+// 扩展情绪系统，匹配当前项目的 8 种情绪
+const emotions = [
+  "neutral", "happy", "angry", "sad", "relaxed",
+  "fear", "disgust", "love", "sleep"
+] as const;
 type EmotionType = (typeof emotions)[number] & VRMExpressionPresetName;
 
 /**
@@ -42,7 +45,6 @@ export const splitSentence = (text: string): string[] => {
 
 export const textsToScreenplay = (
   texts: string[],
-  koeiroParam: KoeiroParam
 ): Screenplay[] => {
   const screenplays: Screenplay[] = [];
   let prevExpression = "neutral";
@@ -65,8 +67,8 @@ export const textsToScreenplay = (
       expression: expression as EmotionType,
       talk: {
         style: emotionToTalkStyle(expression as EmotionType),
-        speakerX: koeiroParam.speakerX,
-        speakerY: koeiroParam.speakerY,
+        speakerX: 0,
+        speakerY: 0,
         message: message,
       },
     });
@@ -86,4 +88,31 @@ const emotionToTalkStyle = (emotion: EmotionType): TalkStyle => {
     default:
       return "talk";
   }
+};
+
+/**
+ * 情绪图标映射
+ */
+export const moodIcons: Record<string, string> = {
+  neutral: "😐",
+  happy: "😄",
+  love: "🥰",
+  angry: "😤",
+  sad: "😢",
+  fear: "😨",
+  disgust: "🤢",
+  sleep: "😴",
+  relaxed: "😌",
+};
+
+export const moodLabels: Record<string, string> = {
+  neutral: "中性",
+  happy: "开心",
+  love: "可爱",
+  angry: "生气",
+  sad: "难过",
+  fear: "害怕",
+  disgust: "嫌弃",
+  sleep: "犯困",
+  relaxed: "放松",
 };

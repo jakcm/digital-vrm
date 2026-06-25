@@ -1,7 +1,5 @@
 import { IconButton } from "./iconButton";
 import { Message } from "@/features/messages/messages";
-import { ElevenLabsParam } from "@/features/constants/elevenLabsParam";
-import { KoeiroParam } from "@/features/constants/koeiroParam";
 import { ChatLog } from "./chatLog";
 import React, { useCallback, useContext, useRef, useState, useEffect } from "react";
 import { Settings } from "./settings";
@@ -10,18 +8,15 @@ import { AssistantText } from "./assistantText";
 
 type Props = {
   openAiKey: string;
-  elevenLabsKey: string;
+  openRouterKey: string;
   systemPrompt: string;
   chatLog: Message[];
-  elevenLabsParam: ElevenLabsParam;
-  koeiroParam: KoeiroParam;
+  edgeTtsVoice: string;
   assistantMessage: string;
   onChangeSystemPrompt: (systemPrompt: string) => void;
   onChangeAiKey: (key: string) => void;
-  onChangeElevenLabsKey: (key: string) => void;
   onChangeChatLog: (index: number, text: string) => void;
-  onChangeElevenLabsParam: (param: ElevenLabsParam) => void;
-  onChangeKoeiromapParam: (param: KoeiroParam) => void;
+  onChangeEdgeTtsVoice: (voice: string) => void;
   handleClickResetChatLog: () => void;
   handleClickResetSystemPrompt: () => void;
   backgroundImage: string;
@@ -29,23 +24,18 @@ type Props = {
   onChatMessage: (message: string) => void;
   onTokensUpdate: (tokens: any) => void;
   onChangeOpenRouterKey: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  openRouterKey: string;
 };
 export const Menu = ({
   openAiKey,
-  elevenLabsKey,
   openRouterKey,
   systemPrompt,
   chatLog,
-  elevenLabsParam,
-  koeiroParam,
+  edgeTtsVoice,
   assistantMessage,
   onChangeSystemPrompt,
   onChangeAiKey,
-  onChangeElevenLabsKey,
   onChangeChatLog,
-  onChangeElevenLabsParam,
-  onChangeKoeiromapParam,
+  onChangeEdgeTtsVoice,
   handleClickResetChatLog,
   handleClickResetSystemPrompt,
   backgroundImage,
@@ -80,30 +70,11 @@ export const Menu = ({
     [onChangeAiKey]
   );
 
-  const handleElevenLabsKeyChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      onChangeElevenLabsKey(event.target.value);
-    },
-    [onChangeElevenLabsKey]
-  );
-
-  const handleElevenLabsVoiceChange = useCallback(
+  const handleEdgeTtsVoiceChange = useCallback(
     (event: React.ChangeEvent<HTMLSelectElement>) => {
-      onChangeElevenLabsParam({
-        voiceId: event.target.value
-      });
+      onChangeEdgeTtsVoice(event.target.value);
     },
-    [onChangeElevenLabsParam]
-  );
-
-  const handleChangeKoeiroParam = useCallback(
-    (x: number, y: number) => {
-      onChangeKoeiromapParam({
-        speakerX: x,
-        speakerY: y,
-      });
-    },
-    [onChangeKoeiromapParam]
+    [onChangeEdgeTtsVoice]
   );
 
   const handleClickOpenVrmFile = useCallback(() => {
@@ -167,19 +138,15 @@ export const Menu = ({
       {showSettings && (
         <Settings
           openAiKey={openAiKey}
-          elevenLabsKey={elevenLabsKey}
           openRouterKey={openRouterKey}
-          elevenLabsParam={elevenLabsParam}
           chatLog={chatLog}
           systemPrompt={systemPrompt}
-          koeiroParam={koeiroParam}
+          edgeTtsVoice={edgeTtsVoice}
           onClickClose={() => setShowSettings(false)}
           onChangeAiKey={handleAiKeyChange}
-          onChangeElevenLabsKey={handleElevenLabsKeyChange}
-          onChangeElevenLabsVoice={handleElevenLabsVoiceChange}
+          onChangeEdgeTtsVoice={handleEdgeTtsVoiceChange}
           onChangeSystemPrompt={handleChangeSystemPrompt}
           onChangeChatLog={onChangeChatLog}
-          onChangeKoeiroParam={handleChangeKoeiroParam}
           onClickOpenVrmFile={handleClickOpenVrmFile}
           onClickResetChatLog={handleClickResetChatLog}
           onClickResetSystemPrompt={handleClickResetSystemPrompt}

@@ -56,8 +56,8 @@ export const MessageInput = ({
           <a target="_blank" href="https://openrouter.ai/" className="underline">
             OpenRouter
           </a>,&nbsp;
-          <a target="_blank" href="https://beta.elevenlabs.io/" className="underline">
-            ElevenLabs
+          <a target="_blank" href="https://learn.microsoft.com/en-us/azure/ai-services/speech-service/" className="underline">
+            Edge TTS
           </a>,&nbsp;
           <a target="_blank" href="https://vroid.com/" className="underline">
             VRoid

@@ -1,9 +1,13 @@
+/**
+ * 语音合成模块 - 替换 ElevenLabs 为 Edge TTS
+ * 
+ * 支持：Edge TTS（免费）、Web Speech API（备用）
+ */
+
 import { wait } from "@/utils/wait";
-import { synthesizeVoice } from "../elevenlabs/elevenlabs";
+import { synthesizeEdgeTTS, getEdgeVoices, EdgeTTSResult } from "../edgeTts/edgeTts";
 import { Viewer } from "../vrmViewer/viewer";
 import { Screenplay } from "./messages";
-import { Talk } from "./messages";
-import { ElevenLabsParam } from "../constants/elevenLabsParam";
 
 const createSpeakCharacter = () => {
   let lastTime = 0;
@@ -12,8 +16,7 @@ const createSpeakCharacter = () => {
 
   return (
     screenplay: Screenplay,
-    elevenLabsKey: string,
-    elevenLabsParam: ElevenLabsParam,
+    edgeTtsVoice: string,
     viewer: Viewer,
     onStart?: () => void,
     onComplete?: () => void
@@ -24,54 +27,49 @@ const createSpeakCharacter = () => {
         await wait(1000 - (now - lastTime));
       }
 
-      // if elevenLabsKey is not set, do not fetch audio
-      if (!elevenLabsKey || elevenLabsKey.trim() == "") {
-        console.log("elevenLabsKey is not set");
-        return null;
-      }
+      const result = await fetchEdgeTTSAudio(screenplay.talk.message, edgeTtsVoice)
+        .catch((err) => {
+          console.error("Edge TTS 合成失败:", err);
+          return null;
+        });
 
-      const buffer = await fetchAudio(screenplay.talk, elevenLabsKey, elevenLabsParam).catch(() => null);
       lastTime = Date.now();
-      return buffer;
+      return result;
     });
 
     prevFetchPromise = fetchPromise;
-    prevSpeakPromise = Promise.all([fetchPromise, prevSpeakPromise]).then(([audioBuffer]) => {
+    prevSpeakPromise = Promise.all([fetchPromise, prevSpeakPromise]).then(([result]) => {
       onStart?.();
-      if (!audioBuffer) {
-        // pass along screenplay to change avatar expression
+      if (!result) {
+        // 没有音频时只更新表情
         return viewer.model?.speak(null, screenplay);
       }
-      return viewer.model?.speak(audioBuffer, screenplay);
+      // 传递 viseme 序列给模型
+      return viewer.model?.speak(result.audioBuffer, screenplay, result.visemes);
     });
     prevSpeakPromise.then(() => {
       onComplete?.();
     });
   };
-}
+};
 
 export const speakCharacter = createSpeakCharacter();
 
-export const fetchAudio = async (
-  talk: Talk, 
-  elevenLabsKey: string,
-  elevenLabsParam: ElevenLabsParam,
-  ): Promise<ArrayBuffer> => {
-  const ttsVoice = await synthesizeVoice(
-    talk.message,
-    talk.speakerX,
-    talk.speakerY,
-    talk.style,
-    elevenLabsKey,
-    elevenLabsParam
-  );
-  const url = ttsVoice.audio;
+/**
+ * 调用 Edge TTS 合成语音
+ */
+export const fetchEdgeTTSAudio = async (
+  text: string,
+  voice: string,
+): Promise<EdgeTTSResult | null> => {
+  if (!text || text.trim() === "") return null;
 
-  if (url == null) {
-    throw new Error("Something went wrong");
-  }
+  return await synthesizeEdgeTTS(text, voice);
+};
 
-  const resAudio = await fetch(url);
-  const buffer = await resAudio.arrayBuffer();
-  return buffer;
+/**
+ * 获取可用的 Edge TTS 发音人列表
+ */
+export const getAvailableVoices = () => {
+  return getEdgeVoices();
 };

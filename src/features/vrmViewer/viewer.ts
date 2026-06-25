@@ -39,14 +39,15 @@ export class Viewer {
     this._clock.start();
   }
 
-  public loadVrm(url: string) {
+  public loadVrm(url?: string) {
+    const modelUrl = url || buildUrl("/default.vrm");
     if (this.model?.vrm) {
       this.unloadVRM();
     }
 
     // gltf and vrm
     this.model = new Model(this._camera || new THREE.Object3D());
-    this.model.loadVRM(url).then(async () => {
+    this.model.loadVRM(modelUrl!).then(async () => {
       if (!this.model?.vrm) return;
 
       // Disable frustum culling

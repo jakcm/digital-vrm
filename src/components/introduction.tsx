@@ -3,11 +3,9 @@ import { Link } from "./link";
 
 type Props = {
   openAiKey: string;
-  elevenLabsKey: string;
   onChangeAiKey: (openAiKey: string) => void;
-  onChangeElevenLabsKey: (elevenLabsKey: string) => void;
 };
-export const Introduction = ({ openAiKey, elevenLabsKey, onChangeAiKey, onChangeElevenLabsKey }: Props) => {
+export const Introduction = ({ openAiKey, onChangeAiKey }: Props) => {
   const [opened, setOpened] = useState(true);
 
   const handleAiKeyChange = useCallback(
@@ -15,13 +13,6 @@ export const Introduction = ({ openAiKey, elevenLabsKey, onChangeAiKey, onChange
       onChangeAiKey(event.target.value);
     },
     [onChangeAiKey]
-  );
-
-  const handleElevenLabsKeyChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      onChangeElevenLabsKey(event.target.value);
-    },
-    [onChangeElevenLabsKey]
   );
 
   return opened ? (
@@ -52,8 +43,8 @@ export const Introduction = ({ openAiKey, elevenLabsKey, onChangeAiKey, onChange
               label={"OpenRouter"}
             />&nbsp;
             is used for LLM access, and 
-            &nbsp;<Link url={"https://beta.elevenlabs.io/"} label={"ElevenLabs"} />&nbsp;
-            is used for text to speech.
+            &nbsp;<Link url={"https://learn.microsoft.com/en-us/azure/ai-services/speech-service/" } label={"Edge TTS"} />&nbsp;
+            is used for free text to speech (no API key required).
           </div>
           <div className="my-16">
             The source code for this demo is available on GitHub. Feel free to experiment with changes and modifications!
@@ -76,24 +67,10 @@ export const Introduction = ({ openAiKey, elevenLabsKey, onChangeAiKey, onChange
         </div>
         <div className="my-24">
           <div className="my-8 font-bold typography-20 text-secondary">
-            ElevenLabs API
+            Edge TTS
           </div>
-          <input
-            type="text"
-            placeholder="ElevenLabs API key"
-            value={elevenLabsKey}
-            onChange={handleElevenLabsKeyChange}
-            className="my-4 px-16 py-8 w-full h-40 bg-surface3 hover:bg-surface3-hover rounded-4 text-ellipsis"
-          ></input>
           <div>
-            Enter your ElevenLabs API key to enable text to speech. You can get an API key at the&nbsp;
-            <Link
-              url="https://beta.elevenlabs.io/"
-              label="ElevenLabs website"
-            />.
-          </div>
-          <div className="my-16">
-          The entered API key is stored in browser local storage and is used to call the ElevenLabs API, so it will not be saved on the server.
+            This app uses Edge TTS (Microsoft) for free text-to-speech. No API key is required. You can select from multiple voices in the settings panel.
           </div>
         </div>
         <div className="my-24">

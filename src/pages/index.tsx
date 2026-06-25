@@ -9,14 +9,12 @@ import {
 import { speakCharacter } from "@/features/messages/speakCharacter";
 import { MessageInputContainer } from "@/components/messageInputContainer";
 import { SYSTEM_PROMPT } from "@/features/constants/systemPromptConstants";
-import { KoeiroParam, DEFAULT_KOEIRO_PARAM } from "@/features/constants/koeiroParam";
 import { getChatResponseStream } from "@/features/chat/openAiChat";
 import { M_PLUS_2, Montserrat } from "next/font/google";
 import { Introduction } from "@/components/introduction";
 import { Menu } from "@/components/menu";
 import { GitHubLink } from "@/components/githubLink";
 import { Meta } from "@/components/meta";
-import { ElevenLabsParam, DEFAULT_ELEVEN_LABS_PARAM } from "@/features/constants/elevenLabsParam";
 import { buildUrl } from "@/utils/buildUrl";
 import { websocketService } from '../services/websocketService';
 import { MessageMiddleOut } from "@/features/messages/messageMiddleOut";
@@ -43,9 +41,7 @@ export default function Home() {
 
   const [systemPrompt, setSystemPrompt] = useState(SYSTEM_PROMPT);
   const [openAiKey, setOpenAiKey] = useState("");
-  const [elevenLabsKey, setElevenLabsKey] = useState("");
-  const [elevenLabsParam, setElevenLabsParam] = useState<ElevenLabsParam>(DEFAULT_ELEVEN_LABS_PARAM);
-  const [koeiroParam, setKoeiroParam] = useState<KoeiroParam>(DEFAULT_KOEIRO_PARAM);
+  const [edgeTtsVoice, setEdgeTtsVoice] = useState("zh-CN-XiaoxiaoNeural");
   const [chatProcessing, setChatProcessing] = useState(false);
   const [chatLog, setChatLog] = useState<Message[]>([]);
   const [assistantMessage, setAssistantMessage] = useState("");
@@ -68,12 +64,11 @@ export default function Home() {
         window.localStorage.getItem("chatVRMParams") as string
       );
       setSystemPrompt(params.systemPrompt);
-      setElevenLabsParam(params.elevenLabsParam);
       setChatLog(params.chatLog);
     }
-    if (window.localStorage.getItem("elevenLabsKey")) {
-      const key = window.localStorage.getItem("elevenLabsKey") as string;
-      setElevenLabsKey(key);
+    if (window.localStorage.getItem("edgeTtsVoice")) {
+      const voice = window.localStorage.getItem("edgeTtsVoice") as string;
+      setEdgeTtsVoice(voice);
     }
     // load openrouter key from localStorage
     const savedOpenRouterKey = localStorage.getItem('openRouterKey');
@@ -90,14 +85,13 @@ export default function Home() {
     process.nextTick(() => {
       window.localStorage.setItem(
         "chatVRMParams",
-        JSON.stringify({ systemPrompt, elevenLabsParam, chatLog })
+        JSON.stringify({ systemPrompt, chatLog })
       )
-
-      // store separately to be backward compatible with local storage data
-      window.localStorage.setItem("elevenLabsKey", elevenLabsKey);
+      // store edgeTtsVoice separately
+      window.localStorage.setItem("edgeTtsVoice", edgeTtsVoice);
     }
     );
-  }, [systemPrompt, elevenLabsParam, chatLog]);
+  }, [systemPrompt, chatLog, edgeTtsVoice]);
 
   useEffect(() => {
     if (backgroundImage) {
@@ -126,8 +120,7 @@ export default function Home() {
   const handleSpeakAi = useCallback(
     async (
       screenplay: Screenplay,
-      elevenLabsKey: string,
-      elevenLabsParam: ElevenLabsParam,
+      edgeTtsVoice: string,
       onStart?: () => void,
       onEnd?: () => void
     ) => {
@@ -135,8 +128,7 @@ export default function Home() {
       try {
         await speakCharacter(
           screenplay, 
-          elevenLabsKey, 
-          elevenLabsParam, 
+          edgeTtsVoice, 
           viewer, 
           () => {
             setIsPlayingAudio(true);
@@ -252,12 +244,12 @@ export default function Home() {
             }
 
             const aiText = `${tag} ${sentence}`;
-            const aiTalks = textsToScreenplay([aiText], koeiroParam);
+            const aiTalks = textsToScreenplay([aiText]);
             aiTextLog += aiText;
 
             // 文ごとに音声を生成 & 再生、返答を表示
             const currentAssistantMessage = sentences.join(" ");
-            handleSpeakAi(aiTalks[0], elevenLabsKey, elevenLabsParam, () => {
+            handleSpeakAi(aiTalks[0], edgeTtsVoice, () => {
               setAssistantMessage(currentAssistantMessage);
             });
           }
@@ -278,7 +270,7 @@ export default function Home() {
       setChatLog(messageLogAssistant);
       setChatProcessing(false);
     },
-    [systemPrompt, chatLog, handleSpeakAi, openAiKey, elevenLabsKey, elevenLabsParam, openRouterKey]
+    [systemPrompt, chatLog, handleSpeakAi, openAiKey, edgeTtsVoice, openRouterKey]
   );
 
   const handleTokensUpdate = useCallback((tokens: any) => {
@@ -317,14 +309,17 @@ export default function Home() {
     localStorage.setItem('openRouterKey', newKey);
   };
 
+  const handleChangeEdgeTtsVoice = useCallback((voice: string) => {
+    setEdgeTtsVoice(voice);
+    localStorage.setItem('edgeTtsVoice', voice);
+  }, []);
+
   return (
     <div className={`${m_plus_2.variable} ${montserrat.variable}`}>
       <Meta />
       <Introduction
         openAiKey={openAiKey}
         onChangeAiKey={setOpenAiKey}
-        elevenLabsKey={elevenLabsKey}
-        onChangeElevenLabsKey={setElevenLabsKey}
       />
       <VrmViewer />
       <MessageInputContainer
@@ -333,19 +328,15 @@ export default function Home() {
       />
       <Menu
         openAiKey={openAiKey}
-        elevenLabsKey={elevenLabsKey}
         openRouterKey={openRouterKey}
         systemPrompt={systemPrompt}
         chatLog={chatLog}
-        elevenLabsParam={elevenLabsParam}
-        koeiroParam={koeiroParam}
+        edgeTtsVoice={edgeTtsVoice}
         assistantMessage={assistantMessage}
         onChangeAiKey={setOpenAiKey}
-        onChangeElevenLabsKey={setElevenLabsKey}
+        onChangeEdgeTtsVoice={handleChangeEdgeTtsVoice}
         onChangeSystemPrompt={setSystemPrompt}
         onChangeChatLog={handleChangeChatLog}
-        onChangeElevenLabsParam={setElevenLabsParam}
-        onChangeKoeiromapParam={setKoeiroParam}
         handleClickResetChatLog={() => setChatLog([])}
         handleClickResetSystemPrompt={() => setSystemPrompt(SYSTEM_PROMPT)}
         backgroundImage={backgroundImage}

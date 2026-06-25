@@ -5,13 +5,11 @@ import { buildUrl } from "@/utils/buildUrl";
 export default function VrmViewer() {
   const { viewer } = useContext(ViewerContext);
 
-  const AVATAR_SAMPLE_B_VRM_URL = 'https://ipfs.io/ipfs/bafybeihx4xjb5mphocdq2os63g43pgnpi46ynolpmhln3oycoasywdnl3u';
-
   const canvasRef = useCallback(
     (canvas: HTMLCanvasElement) => {
       if (canvas) {
         viewer.setup(canvas);
-        viewer.loadVrm(buildUrl(AVATAR_SAMPLE_B_VRM_URL));
+        viewer.loadVrm(buildUrl("/default.vrm"));
 
         // Drag and DropでVRMを差し替え
         canvas.addEventListener("dragover", function (event) {

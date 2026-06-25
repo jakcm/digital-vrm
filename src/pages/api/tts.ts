@@ -1,5 +1,4 @@
-import fetch from "node-fetch";
-import { synthesizeVoice } from "@/features/elevenlabs/elevenlabs";
+import { synthesizeEdgeTTS } from "@/features/edgeTts/edgeTts";
 
 import type { NextApiRequest, NextApiResponse } from "next";
 
@@ -11,17 +10,16 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<Data>
 ) {
-  // function currently not used
+  // function currently not used - Edge TTS runs client-side
   throw new Error("Not implemented");
 
   /*
-  const message = req.body.message;
-  const speaker_x = req.body.speakerX;
-  const speaker_y = req.body.speakerY;
-  const style = req.body.style;
-
-  const voice = await synthesizeVoice(message, speaker_x, speaker_y, style);
-
-  res.status(200).json(voice);
+  const { message, voice } = req.body;
+  const result = await synthesizeEdgeTTS(message, voice);
+  
+  // Convert ArrayBuffer to base64
+  const base64 = Buffer.from(result.audioBuffer).toString('base64');
+  
+  res.status(200).json({ audio: base64 });
   */
 }
