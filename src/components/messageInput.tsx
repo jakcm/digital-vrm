@@ -46,7 +46,7 @@ export const MessageInput = ({
               iconName="24/Send"
               className="bg-secondary hover:bg-secondary-hover active:bg-secondary-press disabled:bg-secondary-disabled"
               isProcessing={isChatProcessing}
-              disabled={isChatProcessing || !userMessage}
+              disabled={isChatProcessing}
               onClick={onClickSendButton}
             />
           </div>

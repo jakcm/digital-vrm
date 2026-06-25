@@ -55,7 +55,11 @@ export const MessageInputContainer = ({
   }, [isMicRecording, speechRecognition]);
 
   const handleClickSendButton = useCallback(() => {
-    onChatProcessStart(userMessage);
+    // Read the input value from DOM as a fallback for automation scenarios
+    // where React controlled input state may not sync with the DOM
+    const inputEl = document.querySelector('input[type="text"][placeholder="Message"]') as HTMLInputElement | null;
+    const text = userMessage || inputEl?.value || '';
+    onChatProcessStart(text);
   }, [onChatProcessStart, userMessage]);
 
   useEffect(() => {

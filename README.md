@@ -1,5 +1,7 @@
 # 🤖 Digital VRM — 智能 3D 实时互动数字人
 
+> **🎯 原始诉求**：基于 VRM 实现智能 3D 实时互动数字人，能说话、唇形同步、表情同步、有动作姿势。
+
 基于 [zoan37/ChatVRM](https://github.com/zoan37/ChatVRM) 深度改造的 VRM 数字人，支持：
 
 - 🗣️ **说话** — Edge TTS 免费语音合成（无需 API Key）

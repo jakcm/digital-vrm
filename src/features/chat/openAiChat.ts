@@ -71,7 +71,7 @@ export async function getChatResponseStream(
             // "model": "cohere/command-r-plus",
             // "model": "anthropic/claude-3.5-sonnet:beta",
             // "model": "google/gemini-2.0-flash-exp:free", // removed from OpenRouter
-            "model": "openai/gpt-oss-120b:nitro",
+            "model": "deepseek/deepseek-v4-flash",
             // gpt-oss is a reasoning model and its reasoning tokens count against
             // max_tokens. Keep reasoning effort low and give the reply some
             // headroom so the spoken answer isn't truncated by the thinking budget.
