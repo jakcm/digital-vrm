@@ -8,6 +8,8 @@ import { RestreamTokens } from "./restreamTokens";
 import { buildUrl } from "@/utils/buildUrl";
 import Cookies from 'js-cookie';
 
+const APP_VERSION = "20260625.142620";
+
 type Props = {
   openAiKey: string;
   openRouterKey: string;
@@ -83,6 +85,7 @@ export const Settings = ({
       <div className="max-h-full overflow-auto">
         <div className="text-text1 max-w-3xl mx-auto px-24 py-64 ">
           <div className="my-24 typography-32 font-bold">Settings</div>
+          <div className="-mt-16 mb-24 text-sm text-gray-600">Version {APP_VERSION}</div>
           <div className="my-24">
             <div className="my-16 typography-20 font-bold">OpenRouter API</div>
             <input
