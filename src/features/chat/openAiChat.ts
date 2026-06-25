@@ -4,45 +4,19 @@ import { getWindowAI } from 'window.ai';
 export async function getChatResponse(messages: Message[], apiKey: string) {
   // function currently not used
   throw new Error("Not implemented");
-
-  /*
-  if (!apiKey) {
-    throw new Error("Invalid API Key");
-  }
-
-  const configuration = new Configuration({
-    apiKey: apiKey,
-  });
-  // ブラウザからAPIを叩くときに発生するエラーを無くすworkaround
-  // https://github.com/openai/openai-node/issues/6#issuecomment-1492814621
-  delete configuration.baseOptions.headers["User-Agent"];
-
-  const openai = new OpenAIApi(configuration);
-
-  const { data } = await openai.createChatCompletion({
-    model: "gpt-3.5-turbo",
-    messages: messages,
-  });
-
-  const [aiRes] = data.choices;
-  const message = aiRes.message?.content || "エラーが発生しました";
-
-  return { message: message };
-  */
 }
+
+/**
+ * 连接超时时间（毫秒）
+ * 如果在此时长内没有收到任何响应头，则判定为网络不可达
+ */
+const CONNECTION_TIMEOUT_MS = 30000;
 
 export async function getChatResponseStream(
   messages: Message[],
   apiKey: string,
   openRouterKey: string
 ) {
-  // TODO: remove usages of apiKey in code
-  /*
-  if (!apiKey) {
-    throw new Error("Invalid API Key");
-  }
-  */
-
   console.log('getChatResponseStream');
 
   console.log('messages');
@@ -50,6 +24,8 @@ export async function getChatResponseStream(
 
   const stream = new ReadableStream({
     async start(controller: ReadableStreamDefaultController) {
+      let streamErrored = false;
+
       try {
 
         const OPENROUTER_API_KEY = openRouterKey;
@@ -57,23 +33,42 @@ export async function getChatResponseStream(
         const YOUR_SITE_NAME = 'ChatVRM';
 
         let isStreamed = false;
-        const generation = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-            "HTTP-Referer": `${YOUR_SITE_URL}`,
-            "X-Title": `${YOUR_SITE_NAME}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            "model": "deepseek/deepseek-v4-flash",
-            "reasoning": { "effort": "low" },
-            "messages": messages,
-            "temperature": 0.7,
-            "max_tokens": 512,
-            "stream": true,
-          })
-        });
+        
+        // 使用 AbortController 实现连接超时
+        const abortController = new AbortController();
+        const timeoutId = setTimeout(() => {
+          abortController.abort();
+        }, CONNECTION_TIMEOUT_MS);
+
+        let generation: Response;
+        try {
+          generation = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+              "HTTP-Referer": `${YOUR_SITE_URL}`,
+              "X-Title": `${YOUR_SITE_NAME}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              "model": "deepseek/deepseek-v4-flash",
+              "reasoning": { "effort": "low" },
+              "messages": messages,
+              "temperature": 0.7,
+              "max_tokens": 512,
+              "stream": true,
+            }),
+            signal: abortController.signal,
+          });
+        } catch (fetchError: any) {
+          clearTimeout(timeoutId);
+          if (fetchError?.name === 'AbortError') {
+            throw new Error(`连接超时（${CONNECTION_TIMEOUT_MS / 1000}秒无响应），可能是网络不可达。请检查网络连接或尝试使用代理。`);
+          }
+          throw new Error(`网络请求失败：${fetchError?.message || '未知错误'}。可能是网络不可达，请检查网络连接或尝试使用代理。`);
+        }
+        
+        clearTimeout(timeoutId);
 
         if (!generation.ok) {
           let errMsg = `API Error ${generation.status}: ${generation.statusText}`;
@@ -87,6 +82,7 @@ export async function getChatResponseStream(
             // keep default message
           }
           controller.error(new Error(errMsg));
+          streamErrored = true;
           return;
         }
 
@@ -97,21 +93,13 @@ export async function getChatResponseStream(
               const { done, value } = await reader.read();
               if (done) break;
 
-              // console.log('value');
-              // console.log(value);
-
               // Assuming the stream is text, convert the Uint8Array to a string
               let chunk = new TextDecoder().decode(value);
-              // Process the chunk here (e.g., append it to the controller for streaming to the client)
-              // console.log(chunk); // Or handle the chunk as needed
 
               // split the chunk into lines
               let lines = chunk.split('\n');
-              // console.log('lines');
-              // console.log(lines);
 
               const SSE_COMMENT = ": OPENROUTER PROCESSING";
-
 
               // filter out lines that start with SSE_COMMENT
               lines = lines.filter((line) => !line.trim().startsWith(SSE_COMMENT));
@@ -128,11 +116,6 @@ export async function getChatResponseStream(
                 const jsonStr = line.substring(5); // "data: ".length == 5
                 return JSON.parse(jsonStr);
               });
-
-              // console.log('messages');
-              // console.log(messages);
-
-              // loop through messages and enqueue them to the controller
 
               try {
                 messages.forEach((message) => {
@@ -152,33 +135,33 @@ export async function getChatResponseStream(
                 throw error;
               }
 
-              // Parse the chunk as JSON
-              // const parsedChunk = JSON.parse(chunk);
-              // Access the content
-              // const content = parsedChunk.choices[0].delta.content;
-              // console.log(content); // Use the content as needed
-
-              // enqueue the content to the controller
-              // controller.enqueue(content);
-
               isStreamed = true;
             }
           } catch (error) {
+            // 传播流读取错误，不再静默吞掉
             console.error('Error reading the stream', error);
+            const errMsg = error instanceof Error ? error.message : String(error);
+            controller.error(new Error(`对话流中断：${errMsg}。可能是网络不稳定，请检查网络连接或尝试使用代理。`));
+            streamErrored = true;
           } finally {
             reader.releaseLock();
           }
         }
 
         // handle case where streaming is not supported
-        if (!isStreamed) {
+        if (!isStreamed && !streamErrored) {
           console.error('Streaming not supported! Need to handle this case.');
-          // controller.enqueue(response[0].message.content);
         }
       } catch (error) {
-        controller.error(error);
+        if (!streamErrored) {
+          controller.error(error);
+          streamErrored = true;
+        }
       } finally {
-        controller.close();
+        // 只在未出错时关闭流，避免对已 errored 的 controller 调用 close() 抛异常
+        if (!streamErrored) {
+          controller.close();
+        }
       }
     },
   });

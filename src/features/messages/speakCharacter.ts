@@ -20,18 +20,15 @@ const createSpeakCharacter = () => {
     viewer: Viewer,
     onStart?: () => void,
     onComplete?: () => void
-  ) => {
+  ): Promise<void> => {
     const fetchPromise = prevFetchPromise.then(async () => {
       const now = Date.now();
       if (now - lastTime < 1000) {
         await wait(1000 - (now - lastTime));
       }
 
-      const result = await fetchEdgeTTSAudio(screenplay.talk.message, edgeTtsVoice)
-        .catch((err) => {
-          console.error("Edge TTS 合成失败:", err);
-          return null;
-        });
+      // 不再吞掉 TTS 错误，让它传播给调用方
+      const result = await fetchEdgeTTSAudio(screenplay.talk.message, edgeTtsVoice);
 
       lastTime = Date.now();
       return result;
@@ -47,7 +44,9 @@ const createSpeakCharacter = () => {
       // 传递 viseme 序列给模型
       return viewer.model?.speak(result.audioBuffer, screenplay, result.visemes);
     });
-    prevSpeakPromise.then(() => {
+    
+    // 返回 promise 以便调用方可以 await
+    return prevSpeakPromise.then(() => {
       onComplete?.();
     });
   };
@@ -57,6 +56,7 @@ export const speakCharacter = createSpeakCharacter();
 
 /**
  * 调用 Edge TTS 合成语音
+ * 错误会直接抛出，由调用方处理
  */
 export const fetchEdgeTTSAudio = async (
   text: string,

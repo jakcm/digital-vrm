@@ -167,22 +167,26 @@ function mapWordToViseme(word: string): string {
 
 /**
  * 将通用 viseme 名称映射到 VRM blend shape 名称
+ * 标准 VRM 模型只有 aa, ih, ou, ee, oh 五个元音表情，
+ * Oculus 辅音 viseme 需要映射到最接近的元音
  */
 function mapToVRMViseme(viseme: string): string | null {
   const vrmMap: Record<string, string> = {
+    // 元音直接映射
     aa: "aa",
-    ee: "E",
+    ee: "ee",
     ih: "ih",
     oh: "oh",
     ou: "ou",
-    PP: "PP",
-    FF: "FF",
-    DD: "DD",
-    kk: "kk",
-    CH: "CH",
-    SS: "SS",
-    nn: "nn",
-    RR: "RR",
+    // 辅音映射到最接近的元音表情
+    PP: "ou",   // 双唇音 p/b/m → 嘴唇闭合，最接近 ou
+    FF: "ih",   // 唇齿音 f/v → 稍微张嘴，最接近 ih
+    DD: "aa",   // 齿龈音 t/d → 张嘴，最接近 aa
+    kk: "aa",   // 软腭音 k/g → 张嘴，最接近 aa
+    CH: "ih",   // 腭龈音 → 稍微张嘴
+    SS: "ih",   // 咝音 s/z → 稍微张嘴
+    nn: "aa",   // 鼻音 n → 张嘴
+    RR: "ou",   // 卷舌音 r → 圆唇
     sil: "neutral",
   };
   return vrmMap[viseme] || null;

@@ -13,7 +13,6 @@ import { getChatResponseStream } from "@/features/chat/openAiChat";
 import { M_PLUS_2, Montserrat } from "next/font/google";
 import { Introduction } from "@/components/introduction";
 import { Menu } from "@/components/menu";
-import { GitHubLink } from "@/components/githubLink";
 import { Meta } from "@/components/meta";
 import { buildUrl } from "@/utils/buildUrl";
 import { websocketService } from '../services/websocketService';
@@ -144,6 +143,8 @@ export default function Home() {
         );
       } catch (error) {
         console.error('Error during AI speech:', error);
+        // 将语音合成错误也提示给用户
+        setChatError(error instanceof Error ? error.message : String(error));
       } finally {
         setIsAISpeaking(false);  // Ensure speaking state is reset even if there's an error
       }
@@ -160,6 +161,8 @@ export default function Home() {
       if (newMessage == null) return;
 
       setChatProcessing(true);
+      // 前の返答をクリア
+      setAssistantMessage("");
       // Add user's message to chat log
       const messageLog: Message[] = [
         ...chatLog,
@@ -181,6 +184,11 @@ export default function Home() {
       if (!localOpenRouterKey) {
         // fallback to free key for users to try things out
         localOpenRouterKey = process.env.NEXT_PUBLIC_OPENROUTER_API_KEY!;
+      }
+      if (!localOpenRouterKey) {
+        setChatError("未设置 OpenRouter API Key，请在设置页面中输入你的 API Key。可在 openrouter.ai 免费获取。");
+        setChatProcessing(false);
+        return;
       }
 
       setChatError(null);
@@ -252,9 +260,9 @@ export default function Home() {
 
             // 文ごとに音声を生成 & 再生、返答を表示
             const currentAssistantMessage = sentences.join(" ");
-            handleSpeakAi(aiTalks[0], edgeTtsVoice, () => {
-              setAssistantMessage(currentAssistantMessage);
-            });
+            // 即座にアシスタントメッセージを表示（TTSのコールバックに依存しない）
+            setAssistantMessage(currentAssistantMessage);
+            handleSpeakAi(aiTalks[0], edgeTtsVoice);
           }
         }
       } catch (e) {
@@ -373,7 +381,6 @@ export default function Home() {
         onChatMessage={handleSendChat}
         onChangeOpenRouterKey={handleOpenRouterKeyChange}
       />
-      <GitHubLink />
     </div>
   );
 }

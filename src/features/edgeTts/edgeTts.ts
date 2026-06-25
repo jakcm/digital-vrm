@@ -28,6 +28,9 @@ export const EDGE_VOICES = [
 
 const DEFAULT_VOICE = "zh-CN-XiaoxiaoNeural";
 
+/** TTS 请求超时时间（毫秒） */
+const TTS_TIMEOUT_MS = 20000;
+
 /**
  * 使用 Edge TTS API 合成语音
  * 
@@ -49,21 +52,39 @@ export async function synthesizeEdgeTTS(
   </voice>
 </speak>`;
 
-  const response = await fetch(
-    "https://southeastasia.tts.speech.microsoft.com/cognitiveservices/v1",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/ssml+xml",
-        "X-Microsoft-OutputFormat": "audio-16khz-32kbitrate-mono-mp3",
-        "Ocp-Apim-Subscription-Key": "EDGE_TTS_FREE", // 微软 Edge 的免费用法
-      },
-      body: ssml,
+  // 使用 AbortController 实现超时
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => {
+    abortController.abort();
+  }, TTS_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(
+      "https://southeastasia.tts.speech.microsoft.com/cognitiveservices/v1",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/ssml+xml",
+          "X-Microsoft-OutputFormat": "audio-16khz-32kbitrate-mono-mp3",
+          "Ocp-Apim-Subscription-Key": "EDGE_TTS_FREE", // 微软 Edge 的免费用法
+        },
+        body: ssml,
+        signal: abortController.signal,
+      }
+    );
+  } catch (fetchError: any) {
+    clearTimeout(timeoutId);
+    if (fetchError?.name === 'AbortError') {
+      throw new Error(`语音合成超时（${TTS_TIMEOUT_MS / 1000}秒无响应），可能是网络不可达。请检查网络连接或尝试使用代理。`);
     }
-  );
+    throw new Error(`语音合成网络请求失败：${fetchError?.message || '未知错误'}。可能是网络不可达，请检查网络连接或尝试使用代理。`);
+  }
+
+  clearTimeout(timeoutId);
 
   if (!response.ok) {
-    throw new Error(`Edge TTS 请求失败: ${response.status}`);
+    throw new Error(`语音合成请求失败: ${response.status} ${response.statusText}`);
   }
 
   const audioBuffer = await response.arrayBuffer();
