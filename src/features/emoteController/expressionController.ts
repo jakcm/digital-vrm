@@ -66,6 +66,15 @@ export class ExpressionController {
     };
   }
 
+  public resetLipSync() {
+    (["aa", "ee", "ih", "oh", "ou", "JawOpen"] as const).forEach((preset) => {
+      if (this._expressionManager?.getExpression(preset)) {
+        this._expressionManager.setValue(preset, 0);
+      }
+    });
+    this._currentLipSync = null;
+  }
+
   public update(delta: number) {
     if (this._autoBlink) {
       this._autoBlink.update(delta);

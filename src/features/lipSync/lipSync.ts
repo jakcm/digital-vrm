@@ -50,12 +50,27 @@ export class LipSync {
   }
 
   /**
+   * 从当前 AudioContext 时间开始驱动 viseme 序列。
+   *
+   * Edge TTS 音频播放会在 playFromArrayBuffer() 内记录起点；但 Web Speech API
+   * 后备方案是浏览器自己播放音频，没有 AudioBufferSource 的 start() 可挂钩。
+   * 如果不在这里重置播放起点，elapsed 会沿用上一次音频的起点，导致只有开头
+   * 瞬间命中 viseme，后续直接错过整个序列。
+   */
+  public startVisemeSequence(visemes: Array<{ viseme: string; startTime: number; endTime: number }>) {
+    this._playbackStartTime = this.audio.currentTime;
+    this.setVisemeSequence(visemes);
+  }
+
+  /**
    * 清除 viseme 序列，回退到音量驱动模式
    * 应在音频播放结束后调用
    */
   public clearVisemeSequence() {
     this._visemeQueue = [];
     this._visemesActive = false;
+    this._currentViseme = "sil";
+    this._visemeWeight = 0;
   }
 
   public update(): LipSyncAnalyzeResult {

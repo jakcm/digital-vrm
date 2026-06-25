@@ -142,14 +142,27 @@ ChatVRM 项目**不内置任何 VRM 模型**（仅有一个 `idle_loop.vrma` 动
 
 ### 4. Edge TTS 替换 ElevenLabs 的关键改动
 - ElevenLabs 需要付费 API Key
-- Edge TTS **完全免费**，且提供 word boundary 时间戳，可精准驱动 viseme 唇同步
+- Edge TTS **完全免费**，可返回音频与 word boundary 时间戳，用于驱动 viseme 唇同步
 - 唇同步从原来的**音量驱动**（嘴巴随音量大小张合）升级为 **viseme 驱动**（根据发音映射嘴型）
-- 注意：免费版 Edge TTS 不返回精确的 word boundary JSON，需要根据文本长度和音频时长估算
+- 当 Edge TTS 没有返回 word boundary 或进入 Web Speech API 后备链路时，需要根据文本长度和音频时长生成 fallback viseme
 
-### 5. VRM 模型的唇同步兼容性
+### 5. 唇形同步经验：不要只看 TTS，要检查时间轴和表情清理
+如果数字人表现为“第一次回复开头张一下嘴，后面一直张着/不动”，优先检查以下三类问题，而不是直接更换 TTS：
+
+1. **播放时间轴起点**：Edge TTS 音频通过 `AudioBufferSource.start()` 播放时会记录 `_playbackStartTime`；但 Web Speech API 后备方案是浏览器自己播放音频，不会进入 `playFromArrayBuffer()`。这种场景必须调用 `startVisemeSequence()` 手动重置 viseme 时间轴，否则 `elapsed` 会沿用旧音频起点，导致后续 viseme 全部错过。
+2. **中文 word boundary 粒度**：中文 TTS 的 word boundary 常常是一整句或一整个词。不能直接把一个中文片段映射成一个嘴型，否则会变成“开头动一下，后面同一个嘴型”。项目通过 `buildVisemeSequence()` 将中文文本拆到字符级，再映射到 `aa / ih / ou / ee / oh`，让中文语音期间持续变化嘴型。
+3. **嘴型 preset 清理**：VRM 嘴型不只 `aa`，还包括 `ee / ih / oh / ou / JawOpen` 等。闭嘴时只把 `aa` 设为 0 会让上一个嘴型残留。项目通过 `resetLipSync()` 统一清空所有可能嘴型，避免“嘴一直张着”。
+
+相关文件：
+- `src/features/lipSync/lipSync.ts` — viseme 时间轴、序列启停、音频播放
+- `src/features/vrmViewer/model.ts` — word boundary → 字符级 viseme 序列、中文映射、播放结束清理
+- `src/features/emoteController/expressionController.ts` — VRM mouth expression 重置
+- `scripts/lipSyncRegressionTest.js` — 唇同步回归检查脚本
+
+### 6. VRM 模型的唇同步兼容性
 不是所有 VRM 模型都有完整的 viseme blendshape。下载模型后建议检查 BlendShape 列表是否包含 `aa`, `ih`, `ou`, `oh`, `ee` 等标准 viseme 名称。VRoid Hub 的 AvatarSample 系列通常兼容性最好。
 
-### 6. GitHub Pages 部署避坑
+### 7. GitHub Pages 部署避坑
 
 #### 🔥 必须加 `.nojekyll` 文件
 GitHub Pages 默认用 Jekyll 处理页面，会覆盖 Next.js 的静态 HTML。解决方法：
@@ -173,8 +186,8 @@ VRM 模型文件通常 10-20MB，`npx gh-pages` 上传和 GitHub Pages 首次构
 # 1. 构建（必须带 BASE_PATH）
 BASE_PATH=/digital-vrm npx next build
 
-# 2. 静态导出（也必须带 BASE_PATH）
-BASE_PATH=/digital-vrm npx next export
+# 2. 静态导出（Next.js export 读取上一步 .next 构建产物）
+npx next export
 
 # 3. 添加 .nojekyll（防止 Jekyll 覆盖）
 touch out/.nojekyll
@@ -188,13 +201,15 @@ sleep 30
 
 > ⚠️ 裸 `npm run build && npm run export`（不带 `BASE_PATH`）会导致部署后页面白屏。
 
-### 7. OpenRouter 已内置，无需额外修改
+### 8. OpenRouter 已内置，无需额外修改
 zoan37/ChatVRM 的 `src/features/chat/openAiChat.ts` 已经内置了 OpenRouter 的流式调用，包括：
 - `getChatResponseStream` 流式函数
 - `openRouterKey` 的 localStorage 持久化
-- 模型切换逻辑（默认 `openai/gpt-oss-120b:nitro`）
+- 模型调用逻辑（当前默认 `deepseek/deepseek-v4-flash`）
 
-### 8. 未来规划
+> ⚠️ 公开 GitHub Pages 部署不要在 `NEXT_PUBLIC_OPENROUTER_API_KEY` 中内置真实密钥。`NEXT_PUBLIC_*` 会被 Next.js 烤进客户端 JS bundle，公开仓库推送时可能触发 GitHub Push Protection，且密钥会泄露。正确做法是让用户在 Settings 页面自行输入 OpenRouter Key，并保存到浏览器 localStorage。
+
+### 9. 未来规划
 - [ ] 跳舞功能：集成 VRM 动画文件（`.vrma`）播放
 - [ ] 更多 VRM 动画：手势、表情组合
 - [ ] 模型热替换 UI：设置面板中的模型 URL 输入

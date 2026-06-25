@@ -270,7 +270,7 @@ export async function synthesizeEdgeTTS(
  */
 function generateFallbackVisemes(text: string, audioBuffer: ArrayBuffer): VisemeInfo[] {
   const totalDuration = estimateAudioDuration(audioBuffer);
-  const words = text.split(/(?<=[。，！？\n.!?\s])|(?=[。，！？\n.!?\s])/).filter(w => w.trim());
+  const words = Array.from(text).filter((char) => char.trim() && !/[。，！？\n.!?\s]/.test(char));
   
   if (words.length === 0) return [];
 

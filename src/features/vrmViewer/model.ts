@@ -88,12 +88,8 @@ export class Model {
     if (!buffer || buffer.byteLength === 0) {
       // Web Speech API 后备方案：音频已由浏览器播放，只需设置 viseme 序列
       if (visemes && visemes.length > 0) {
-        const visemeSequence = visemes.map(v => ({
-          viseme: mapWordToViseme(v.word),
-          startTime: v.offset,
-          endTime: v.offset + v.duration,
-        }));
-        this._lipSync?.setVisemeSequence(visemeSequence);
+        const visemeSequence = buildVisemeSequence(visemes);
+        this._lipSync?.startVisemeSequence(visemeSequence);
       }
       // 等待一段时间让 viseme 动画播放（基于文本长度估算）
       const msgLength = screenplay.talk.message.length;
@@ -103,16 +99,13 @@ export class Model {
       await new Promise(resolve => setTimeout(resolve, estimatedDuration * 1000));
       // 清除 viseme 序列，避免残留
       this._lipSync?.clearVisemeSequence();
+      this.resetLipSync();
       return;
     }
 
     // 如果有 viseme 序列，传给 lipSync
     if (visemes && visemes.length > 0) {
-      const visemeSequence = visemes.map(v => ({
-        viseme: mapWordToViseme(v.word),
-        startTime: v.offset,
-        endTime: v.offset + v.duration,
-      }));
+      const visemeSequence = buildVisemeSequence(visemes);
       this._lipSync?.setVisemeSequence(visemeSequence);
     }
 
@@ -138,7 +131,7 @@ export class Model {
           }
         } else {
           // viseme 间隙：闭嘴
-          this.emoteController?.lipSync("aa" as any, 0);
+          this.resetLipSync();
         }
       } else {
         // 音量驱动 fallback（无 viseme 序列时）
@@ -156,6 +149,33 @@ export class Model {
     this.mixer?.update(delta);
     this.vrm?.update(delta);
   }
+
+  private resetLipSync() {
+    this.emoteController?.resetLipSync();
+  }
+}
+
+/**
+ * 将 TTS word boundary 拆成更细的字符级 viseme 片段。
+ *
+ * Edge TTS 的 WordBoundary 在中文场景常常整句/整词返回；如果直接把一个中文词映射为
+ * 单个 viseme，会表现为“开头动一下，后面一直同一个嘴型”。拆成字符级片段后，中文
+ * 也能在整段语音中持续变化。
+ */
+function buildVisemeSequence(visemes: VisemeInfo[]): Array<{ viseme: string; startTime: number; endTime: number }> {
+  return visemes.flatMap((v) => {
+    const chars = Array.from(v.word).filter((char) => char.trim() && !/[。，！？\n.!?\s]/.test(char));
+    if (chars.length === 0) {
+      return [{ viseme: "sil", startTime: v.offset, endTime: v.offset + v.duration }];
+    }
+
+    const segmentDuration = v.duration / chars.length;
+    return chars.map((char, index) => ({
+      viseme: mapWordToViseme(char),
+      startTime: v.offset + segmentDuration * index,
+      endTime: v.offset + segmentDuration * (index + 1),
+    }));
+  });
 }
 
 /**
@@ -163,6 +183,13 @@ export class Model {
  * 基于 Oculus 15 viseme 标准
  */
 function mapWordToViseme(word: string): string {
+  const char = word.charAt(0);
+
+  if (/^[\u4e00-\u9fff]$/.test(char)) {
+    const chineseVisemes = ["aa", "ih", "ou", "ee", "oh"];
+    return chineseVisemes[char.charCodeAt(0) % chineseVisemes.length];
+  }
+
   const firstChar = word.charAt(0).toLowerCase();
   const visemeMap: Record<string, string> = {
     'a': 'aa',

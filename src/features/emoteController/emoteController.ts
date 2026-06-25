@@ -21,6 +21,10 @@ export class EmoteController {
     this._expressionController.lipSync(preset, value);
   }
 
+  public resetLipSync() {
+    this._expressionController.resetLipSync();
+  }
+
   public update(delta: number) {
     this._expressionController.update(delta);
   }
