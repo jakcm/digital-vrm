@@ -85,7 +85,22 @@ export class Model {
       this.prevPlayedEmotion = screenplay.expression;
     }
 
-    if (!buffer) {
+    if (!buffer || buffer.byteLength === 0) {
+      // Web Speech API 后备方案：音频已由浏览器播放，只需设置 viseme 序列
+      if (visemes && visemes.length > 0) {
+        const visemeSequence = visemes.map(v => ({
+          viseme: mapWordToViseme(v.word),
+          startTime: v.offset,
+          endTime: v.offset + v.duration,
+        }));
+        this._lipSync?.setVisemeSequence(visemeSequence);
+      }
+      // 等待一段时间让 viseme 动画播放（基于文本长度估算）
+      const msgLength = screenplay.talk.message.length;
+      const estimatedDuration = visemes && visemes.length > 0
+        ? visemes[visemes.length - 1].offset + visemes[visemes.length - 1].duration
+        : Math.min(msgLength * 0.15, 10);
+      await new Promise(resolve => setTimeout(resolve, estimatedDuration * 1000));
       return;
     }
 
