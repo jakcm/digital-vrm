@@ -340,7 +340,6 @@ export default function Home() {
       />
       {chatError && (
         <div
-          onClick={() => setChatError(null)}
           style={{
             position: "fixed",
             top: 24,
@@ -351,15 +350,43 @@ export default function Home() {
             color: "#c00",
             border: "1px solid #c00",
             borderRadius: 8,
-            padding: "12px 24px",
-            fontSize: 14,
-            fontWeight: "bold",
             maxWidth: "90vw",
-            cursor: "pointer",
             boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+            display: "flex",
+            alignItems: "flex-start",
+            userSelect: "text",
+            cursor: "text",
           }}
         >
-          ⚠️ {chatError}
+          <div
+            style={{
+              padding: "12px 16px",
+              fontSize: 14,
+              fontWeight: "bold",
+              userSelect: "text",
+              cursor: "text",
+              WebkitUserSelect: "text",
+            }}
+          >
+            ⚠️ {chatError}
+          </div>
+          <button
+            onClick={() => setChatError(null)}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#c00",
+              cursor: "pointer",
+              fontSize: 18,
+              fontWeight: "bold",
+              padding: "8px 12px",
+              lineHeight: 1,
+              flexShrink: 0,
+            }}
+            aria-label="关闭错误信息"
+          >
+            ×
+          </button>
         </div>
       )}
       <Menu

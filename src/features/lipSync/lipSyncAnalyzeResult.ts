@@ -9,4 +9,6 @@ export interface LipSyncAnalyzeResult {
   volume: number;
   viseme?: string;
   visemeWeight?: number;
+  /** 是否有 viseme 序列正在驱动（true 时应走 viseme 路径，false 时走音量 fallback） */
+  visemesActive?: boolean;
 }

@@ -5,6 +5,7 @@ import { Message } from "@/features/messages/messages";
 import { Link } from "./link";
 import { getEdgeVoices } from "@/features/edgeTts/edgeTts";
 import { RestreamTokens } from "./restreamTokens";
+import { buildUrl } from "@/utils/buildUrl";
 import Cookies from 'js-cookie';
 
 type Props = {
@@ -192,6 +193,23 @@ export const Settings = ({
               </a>,&nbsp;
               <a target="_blank" href="https://vroid.com/" className="underline">
                 VRoid
+              </a>
+            </div>
+            <div className="my-16">
+              <a
+                draggable={false}
+                href="https://github.com/zoan37/ChatVRM"
+                rel="noopener noreferrer"
+                target="_blank"
+                className="inline-flex items-center gap-8 p-8 rounded-16 bg-[#1F2328] hover:bg-[#33383E] active:bg-[565A60]"
+              >
+                <img
+                  alt="GitHub"
+                  height={24}
+                  width={24}
+                  src={buildUrl("/github-mark-white.svg")}
+                ></img>
+                <span className="mx-4 text-white font-M_PLUS_2 font-bold">Fork me on GitHub</span>
               </a>
             </div>
           </div>

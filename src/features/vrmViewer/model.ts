@@ -101,6 +101,8 @@ export class Model {
         ? visemes[visemes.length - 1].offset + visemes[visemes.length - 1].duration
         : Math.min(msgLength * 0.15, 10);
       await new Promise(resolve => setTimeout(resolve, estimatedDuration * 1000));
+      // 清除 viseme 序列，避免残留
+      this._lipSync?.clearVisemeSequence();
       return;
     }
 
@@ -116,6 +118,8 @@ export class Model {
 
     await new Promise((resolve) => {
       this._lipSync?.playFromArrayBuffer(buffer, () => {
+        // 音频播放结束，清除 viseme 序列，回退到音量驱动
+        this._lipSync?.clearVisemeSequence();
         resolve(true);
       });
     });
@@ -123,16 +127,21 @@ export class Model {
 
   public update(delta: number): void {
     if (this._lipSync) {
-      const { volume, viseme, visemeWeight } = this._lipSync.update();
+      const { volume, viseme, visemeWeight, visemesActive } = this._lipSync.update();
 
-      if (viseme && visemeWeight && visemeWeight > 0) {
-        // 使用 viseme 驱动的精准唇同步
-        const vrmViseme = mapToVRMViseme(viseme);
-        if (vrmViseme) {
-          this.emoteController?.lipSync(vrmViseme as any, visemeWeight);
+      if (visemesActive) {
+        // viseme 驱动模式：严格按 viseme 序列驱动，不 fallback 到音量
+        if (visemeWeight && visemeWeight > 0 && viseme) {
+          const vrmViseme = mapToVRMViseme(viseme);
+          if (vrmViseme) {
+            this.emoteController?.lipSync(vrmViseme as any, visemeWeight);
+          }
+        } else {
+          // viseme 间隙：闭嘴
+          this.emoteController?.lipSync("aa" as any, 0);
         }
       } else {
-        // 回退到音量驱动的简单唇同步
+        // 音量驱动 fallback（无 viseme 序列时）
         let expression = this.vrm?.expressionManager?.getExpression("JawOpen");
         if (expression) {
           // @ts-ignore

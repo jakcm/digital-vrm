@@ -32,6 +32,7 @@ export class LipSync {
   private _currentViseme: string = "sil";
   private _visemeWeight: number = 0;
   private _playbackStartTime: number = 0; // 音频播放开始的 AudioContext 绝对时间
+  private _visemesActive: boolean = false; // 是否有 viseme 序列正在驱动
 
   public constructor(audio: AudioContext) {
     this.audio = audio;
@@ -45,6 +46,16 @@ export class LipSync {
    */
   public setVisemeSequence(visemes: Array<{ viseme: string; startTime: number; endTime: number }>) {
     this._visemeQueue = [...visemes];
+    this._visemesActive = visemes.length > 0;
+  }
+
+  /**
+   * 清除 viseme 序列，回退到音量驱动模式
+   * 应在音频播放结束后调用
+   */
+  public clearVisemeSequence() {
+    this._visemeQueue = [];
+    this._visemesActive = false;
   }
 
   public update(): LipSyncAnalyzeResult {
@@ -55,39 +66,52 @@ export class LipSync {
       volume = Math.max(volume, Math.abs(this.timeDomainData[i]));
     }
 
-    // cook
-    volume = 1 / (1 + Math.exp(-45 * volume + 5));
-    if (volume < 0.1) volume = 0;
+    // cook — 使用更平滑的 sigmoid，避免音量被压到恒定 1.0
+    volume = 1 / (1 + Math.exp(-12 * volume + 2));
+    if (volume < 0.05) volume = 0;
 
     // 使用相对于播放起点的.elapsedTime来匹配 viseme
-    // viseme 时间戳是 0-based（相对于音频开头），需要减去播放起始时间
     const elapsed = this.audio.currentTime - this._playbackStartTime;
 
     let activeViseme = "sil";
     let activeWeight = 0;
 
-    // 查找当前时间对应的 viseme
-    for (const v of this._visemeQueue) {
-      if (elapsed >= v.startTime && elapsed < v.endTime) {
-        activeViseme = v.viseme;
-        // 计算在 viseme 区间内的进度（0-1 淡入淡出）
-        const mid = (v.startTime + v.endTime) / 2;
-        const halfDur = (v.endTime - v.startTime) / 2;
-        activeWeight = Math.max(0, 1 - Math.abs(elapsed - mid) / halfDur);
-        break;
+    if (this._visemesActive) {
+      // viseme 驱动模式：只按时间序列查找，不受音量影响
+      for (const v of this._visemeQueue) {
+        if (elapsed >= v.startTime && elapsed < v.endTime) {
+          activeViseme = v.viseme;
+          // 计算在 viseme 区间内的进度（0-1 淡入淡出）
+          const mid = (v.startTime + v.endTime) / 2;
+          const halfDur = (v.endTime - v.startTime) / 2;
+          activeWeight = Math.max(0, 1 - Math.abs(elapsed - mid) / halfDur);
+          break;
+        }
       }
+
+      // 清理已过期的 viseme
+      this._visemeQueue = this._visemeQueue.filter(v => elapsed < v.endTime);
+
+      this._currentViseme = activeViseme;
+      this._visemeWeight = activeWeight;
+
+      return {
+        volume,
+        viseme: activeViseme,
+        visemeWeight: activeWeight,
+        visemesActive: true,
+      };
     }
 
-    // 清理已过期的 viseme
-    this._visemeQueue = this._visemeQueue.filter(v => elapsed < v.endTime);
-
-    this._currentViseme = activeViseme;
-    this._visemeWeight = activeWeight;
+    // 音量驱动 fallback（无 viseme 序列时）
+    this._currentViseme = "sil";
+    this._visemeWeight = 0;
 
     return {
       volume,
-      viseme: activeViseme,
-      visemeWeight: volume > 0.1 ? activeWeight : 0,
+      viseme: "sil",
+      visemeWeight: 0,
+      visemesActive: false,
     };
   }
 
