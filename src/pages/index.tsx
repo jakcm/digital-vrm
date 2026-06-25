@@ -48,6 +48,7 @@ export default function Home() {
   const [backgroundImage, setBackgroundImage] = useState<string>('');
   const [restreamTokens, setRestreamTokens] = useState<any>(null);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
   // needed because AI speaking could involve multiple audios being played in sequence
   const [isAISpeaking, setIsAISpeaking] = useState(false);
   const [openRouterKey, setOpenRouterKey] = useState<string>(() => {
@@ -182,9 +183,11 @@ export default function Home() {
         localOpenRouterKey = process.env.NEXT_PUBLIC_OPENROUTER_API_KEY!;
       }
 
+      setChatError(null);
       const stream = await getChatResponseStream(processedMessages, openAiKey, localOpenRouterKey).catch(
         (e) => {
           console.error(e);
+          setChatError(e instanceof Error ? e.message : String(e));
           return null;
         }
       );
@@ -257,6 +260,7 @@ export default function Home() {
       } catch (e) {
         setChatProcessing(false);
         console.error(e);
+        setChatError(e instanceof Error ? e.message : String(e));
       } finally {
         reader.releaseLock();
       }
@@ -326,6 +330,30 @@ export default function Home() {
         isChatProcessing={chatProcessing}
         onChatProcessStart={handleSendChat}
       />
+      {chatError && (
+        <div
+          onClick={() => setChatError(null)}
+          style={{
+            position: "fixed",
+            top: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 9999,
+            background: "#fee",
+            color: "#c00",
+            border: "1px solid #c00",
+            borderRadius: 8,
+            padding: "12px 24px",
+            fontSize: 14,
+            fontWeight: "bold",
+            maxWidth: "90vw",
+            cursor: "pointer",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+          }}
+        >
+          ⚠️ {chatError}
+        </div>
+      )}
       <Menu
         openAiKey={openAiKey}
         openRouterKey={openRouterKey}

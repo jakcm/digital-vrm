@@ -61,21 +61,12 @@ export async function getChatResponseStream(
           method: "POST",
           headers: {
             "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-            "HTTP-Referer": `${YOUR_SITE_URL}`, // Optional, for including your app on openrouter.ai rankings.
-            "X-Title": `${YOUR_SITE_NAME}`, // Optional. Shows in rankings on openrouter.ai.
+            "HTTP-Referer": `${YOUR_SITE_URL}`,
+            "X-Title": `${YOUR_SITE_NAME}`,
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
-            // "model": "cohere/command",
-            // "model": "openai/gpt-3.5-turbo",
-            // "model": "cohere/command-r-plus",
-            // "model": "anthropic/claude-3.5-sonnet:beta",
-            // "model": "google/gemini-2.0-flash-exp:free", // removed from OpenRouter
             "model": "deepseek/deepseek-v4-flash",
-            // gpt-oss is a reasoning model and its reasoning tokens count against
-            // max_tokens. Keep reasoning effort low and give the reply some
-            // headroom so the spoken answer isn't truncated by the thinking budget.
-            // (reasoning tokens are filtered out of the stream below.)
             "reasoning": { "effort": "low" },
             "messages": messages,
             "temperature": 0.7,
@@ -83,6 +74,21 @@ export async function getChatResponseStream(
             "stream": true,
           })
         });
+
+        if (!generation.ok) {
+          let errMsg = `API Error ${generation.status}: ${generation.statusText}`;
+          try {
+            const errBody = await generation.text();
+            const errJson = JSON.parse(errBody);
+            if (errJson?.error?.message) {
+              errMsg = `API Error ${generation.status}: ${errJson.error.message}`;
+            }
+          } catch {
+            // keep default message
+          }
+          controller.error(new Error(errMsg));
+          return;
+        }
 
         if (generation.body) {
           const reader = generation.body.getReader();
