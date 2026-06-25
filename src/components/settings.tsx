@@ -178,6 +178,23 @@ export const Settings = ({
             </div>
           </div>
           <RestreamTokens onTokensUpdate={onTokensUpdate} onChatMessage={onChatMessage} />
+          <div className="my-40">
+            <div className="my-16 typography-20 font-bold">
+              Powered By
+            </div>
+            <div className="my-8 text-sm text-gray-600">
+              This app is powered by&nbsp;
+              <a target="_blank" href="https://openrouter.ai/" className="underline">
+                OpenRouter
+              </a>,&nbsp;
+              <a target="_blank" href="https://learn.microsoft.com/en-us/azure/ai-services/speech-service/" className="underline">
+                Edge TTS
+              </a>,&nbsp;
+              <a target="_blank" href="https://vroid.com/" className="underline">
+                VRoid
+              </a>
+            </div>
+          </div>
           {chatLog.length > 0 && (
             <div className="my-40">
               <div className="my-8 grid-cols-2">
