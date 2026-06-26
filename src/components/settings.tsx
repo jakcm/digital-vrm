@@ -8,7 +8,7 @@ import { RestreamTokens } from "./restreamTokens";
 import { buildUrl } from "@/utils/buildUrl";
 import Cookies from 'js-cookie';
 
-const APP_VERSION = "20260625.142620";
+const APP_VERSION = "20260625.162040";
 
 type Props = {
   openAiKey: string;
