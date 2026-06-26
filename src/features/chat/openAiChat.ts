@@ -88,16 +88,28 @@ export async function getChatResponseStream(
 
         if (generation.body) {
           const reader = generation.body.getReader();
+          const decoder = new TextDecoder();
+          // SSE 行缓冲区：累积跨 chunk 的不完整行
+          let sseBuffer = '';
+
           try {
             while (true) {
               const { done, value } = await reader.read();
               if (done) break;
 
-              // Assuming the stream is text, convert the Uint8Array to a string
-              let chunk = new TextDecoder().decode(value);
+              // 将新数据追加到缓冲区
+              sseBuffer += decoder.decode(value, { stream: true });
 
-              // split the chunk into lines
-              let lines = chunk.split('\n');
+              // 按换行符分割，最后一个元素可能是不完整的行
+              let lines = sseBuffer.split('\n');
+
+              // 最后一个元素是不完整行（没有以 \n 结尾），保留到下次拼接
+              // 只有当缓冲区不以 \n 结尾时才需要保留
+              if (sseBuffer.endsWith('\n')) {
+                sseBuffer = '';
+              } else {
+                sseBuffer = lines.pop() || '';
+              }
 
               const SSE_COMMENT = ": OPENROUTER PROCESSING";
 
@@ -111,11 +123,18 @@ export async function getChatResponseStream(
               const dataLines = lines.filter(line => line.startsWith("data:"));
 
               // Extract and parse the JSON from each data line
-              const messages = dataLines.map(line => {
-                // Remove the "data: " prefix and parse the JSON
+              const messages: any[] = [];
+              for (const line of dataLines) {
                 const jsonStr = line.substring(5); // "data: ".length == 5
-                return JSON.parse(jsonStr);
-              });
+                try {
+                  messages.push(JSON.parse(jsonStr));
+                } catch (parseError) {
+                  // JSON 解析失败（可能是 chunk 边界残余或非标准 SSE 行）
+                  // 跳过此行，不影响后续流处理
+                  console.warn('SSE JSON parse failed, skipping line:', jsonStr.substring(0, 80));
+                  continue;
+                }
+              }
 
               try {
                 messages.forEach((message) => {
@@ -136,6 +155,26 @@ export async function getChatResponseStream(
               }
 
               isStreamed = true;
+            }
+
+            // 处理缓冲区中可能残留的最后一行
+            if (sseBuffer.trim()) {
+              const line = sseBuffer.trim();
+              if (line.startsWith("data:") &&
+                  !line.endsWith("data: [DONE]") &&
+                  !line.startsWith(": OPENROUTER PROCESSING")) {
+                const jsonStr = line.substring(5);
+                try {
+                  const message = JSON.parse(jsonStr);
+                  const content = message.choices?.[0]?.delta?.content;
+                  if (content) {
+                    controller.enqueue(content);
+                  }
+                } catch (parseError) {
+                  // 流结束后的残余行，跳过
+                  console.warn('SSE residual line parse failed:', jsonStr.substring(0, 80));
+                }
+              }
             }
           } catch (error) {
             // 传播流读取错误，不再静默吞掉

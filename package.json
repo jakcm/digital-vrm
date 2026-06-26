@@ -1,6 +1,6 @@
 {
   "name": "chat-vrm",
-  "version": "0.1.0",
+  "version": "20260625.181614",
   "private": true,
   "scripts": {
     "dev": "next dev",

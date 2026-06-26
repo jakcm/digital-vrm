@@ -51,15 +51,16 @@ export class ExpressionController {
   }
 
   public lipSync(preset: VRMExpressionPresetName, value: number) {
-    // let expressions = this._expressionManager?.getExpressions();
-    // console.log(expressions);
-
-    // let expression = this._expressionManager?.getExpression("MouthPucker");
-    //console.log(expression);
-
+    // 立即清除旧值
     if (this._currentLipSync) {
       this._expressionManager?.setValue(this._currentLipSync.preset, 0);
     }
+    // 立即应用新值（不等到 update()），确保每一帧 blend shape 实时更新
+    const weight =
+      this._currentEmotion === "neutral"
+        ? value * 0.5
+        : value * 0.25;
+    this._expressionManager?.setValue(preset, weight);
     this._currentLipSync = {
       preset,
       value,

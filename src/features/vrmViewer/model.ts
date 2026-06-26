@@ -91,13 +91,16 @@ export class Model {
         const visemeSequence = buildVisemeSequence(visemes);
         this._lipSync?.startVisemeSequence(visemeSequence);
       }
+      // 标记为"播放中"，防止 viseme 队列中途空了就被过早关闭
+      this._lipSync?.setPlaying(true);
       // 等待一段时间让 viseme 动画播放（基于文本长度估算）
       const msgLength = screenplay.talk.message.length;
       const estimatedDuration = visemes && visemes.length > 0
         ? visemes[visemes.length - 1].offset + visemes[visemes.length - 1].duration
         : Math.min(msgLength * 0.15, 10);
       await new Promise(resolve => setTimeout(resolve, estimatedDuration * 1000));
-      // 清除 viseme 序列，避免残留
+      // 清除 viseme 序列和播放状态，避免残留
+      this._lipSync?.setPlaying(false);
       this._lipSync?.clearVisemeSequence();
       this.resetLipSync();
       return;
@@ -123,24 +126,35 @@ export class Model {
       const { volume, viseme, visemeWeight, visemesActive } = this._lipSync.update();
 
       if (visemesActive) {
-        // viseme 驱动模式：严格按 viseme 序列驱动，不 fallback 到音量
-        if (visemeWeight && visemeWeight > 0 && viseme) {
+        // viseme 驱动模式：严格按 viseme 序列驱动
+        const weight = visemeWeight ?? 0;
+        if (weight > 0 && viseme && viseme !== "sil") {
+          // 有效 viseme：驱动嘴型
           const vrmViseme = mapToVRMViseme(viseme);
           if (vrmViseme) {
-            this.emoteController?.lipSync(vrmViseme as any, visemeWeight);
+            this.emoteController?.lipSync(vrmViseme as any, weight);
           }
+        } else if (volume > 0.08) {
+          // viseme 间隙但有音量：用音量做微弱平滑（避免突变）
+          this.emoteController?.lipSync("aa" as any, volume * 0.3);
         } else {
-          // viseme 间隙：闭嘴
+          // viseme 间隙 + 低音量：闭嘴
           this.resetLipSync();
         }
       } else {
         // 音量驱动 fallback（无 viseme 序列时）
-        let expression = this.vrm?.expressionManager?.getExpression("JawOpen");
-        if (expression) {
-          // @ts-ignore
-          this.emoteController?.lipSync("JawOpen", volume);
+        // 修复后 sigmoid 不会再产生 DC 偏置，volume=0 时此分支会走 resetLipSync()
+        if (volume > 0.08) {
+          let expression = this.vrm?.expressionManager?.getExpression("JawOpen");
+          if (expression) {
+            // @ts-ignore
+            this.emoteController?.lipSync("JawOpen", volume * 0.4);
+          } else {
+            this.emoteController?.lipSync("aa" as any, volume * 0.4);
+          }
         } else {
-          this.emoteController?.lipSync("aa" as any, volume);
+          // 音量足够低，完全闭嘴
+          this.resetLipSync();
         }
       }
     }
@@ -163,7 +177,7 @@ export class Model {
  * 也能在整段语音中持续变化。
  */
 function buildVisemeSequence(visemes: VisemeInfo[]): Array<{ viseme: string; startTime: number; endTime: number }> {
-  return visemes.flatMap((v) => {
+  const sequence = visemes.flatMap((v) => {
     const chars = Array.from(v.word).filter((char) => char.trim() && !/[。，！？\n.!?\s]/.test(char));
     if (chars.length === 0) {
       return [{ viseme: "sil", startTime: v.offset, endTime: v.offset + v.duration }];
@@ -176,6 +190,18 @@ function buildVisemeSequence(visemes: VisemeInfo[]): Array<{ viseme: string; sta
       endTime: v.offset + segmentDuration * (index + 1),
     }));
   });
+
+  // 在序列末尾添加一个 trailing silence，确保最后一个 viseme 结束后嘴巴能合上
+  if (sequence.length > 0) {
+    const last = sequence[sequence.length - 1];
+    sequence.push({
+      viseme: "sil",
+      startTime: last.endTime,
+      endTime: last.endTime + 0.3, // 300ms 的静默
+    });
+  }
+
+  return sequence;
 }
 
 /**
