@@ -33,8 +33,11 @@ const DEFAULT_VOICE = "zh-CN-XiaoxiaoNeural";
 /** Edge TTS 固定的 TrustedClientToken（公开值，非密钥） */
 const TRUSTED_CLIENT_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
 
+/** Edge TTS Sec-MS-GEC 版本 */
+const MS_GEC_VERSION = "1-142.0.3595";
+
 /** WebSocket 连接超时 */
-const WS_TIMEOUT_MS = 15000;
+const WS_TIMEOUT_MS = 10000;
 
 /**
  * 生成 RFC 4122 格式的 UUID（无横线）
@@ -62,6 +65,24 @@ function getTimestamp(): string {
 }
 
 /**
+ * 生成 Edge TTS 所需的 Sec-MS-GEC 时间窗签名
+ * 使用 SHA-256 对（时间窗 + TrustedClientToken）签名
+ * 时间窗：UNIX 时间戳（秒）-> 100ns ticks，然后四舍五入到 300 秒窗口
+ */
+async function generateSecMsGec(token: string): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  const ticks = now + 11644473600; // Windows epoch offset
+  const rounded = ticks - (ticks % 300);
+  const windowsTicks = rounded * 10000000;
+  const encoder = new TextEncoder();
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(`${windowsTicks}${token}`));
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase();
+}
+
+/**
  * 使用 Edge TTS WebSocket API 合成语音
  * 
  * 流程：
@@ -82,7 +103,10 @@ export async function synthesizeEdgeTTS(
   }
 
   const requestId = generateUUID();
-  
+
+  // 生成 Sec-MS-GEC 签名（需要在 WS URL 构造前异步生成）
+  const secMsGec = await generateSecMsGec(TRUSTED_CLIENT_TOKEN);
+
   // 构建 SSML
   const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="zh-CN">
   <voice name="${voice}">
@@ -92,8 +116,8 @@ export async function synthesizeEdgeTTS(
   </voice>
 </speak>`;
 
-  // 构建 WebSocket URL
-  const wsUrl = `wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=${TRUSTED_CLIENT_TOKEN}`;
+  // 构建 WebSocket URL（含 Sec-MS-GEC 安全签名 + ConnectionId）
+  const wsUrl = `wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=${TRUSTED_CLIENT_TOKEN}&Sec-MS-GEC=${secMsGec}&Sec-MS-GEC-Version=${MS_GEC_VERSION}&ConnectionId=${requestId}`;
 
   return new Promise<EdgeTTSResult>((resolve, reject) => {
     const audioChunks: ArrayBuffer[] = [];
@@ -194,25 +218,17 @@ export async function synthesizeEdgeTTS(
           return;
         }
 
-        // 解析 word boundary 元数据
-        if (path === 'audio.metadata') {
-          const jsonStart = event.data.indexOf('{');
-          if (jsonStart >= 0) {
-            try {
-              const metadata = JSON.parse(event.data.substring(jsonStart));
-              // WordBoundary: { "Offset": 500000, "Duration": 1500000, "text": "你好" }
-              // Offset 和 Duration 单位是百纳秒（100ns ticks）
-              if (metadata?.Metadata?.[0]?.WordBoundary) {
-                const wb = metadata.Metadata[0].WordBoundary;
-                visemes.push({
-                  word: wb.text || wb.Text || '',
-                  offset: (wb.Offset || 0) / 10_000_000,  // 百纳秒 → 秒
-                  duration: (wb.Duration || 0) / 10_000_000,
-                });
-              }
-            } catch {
-              // 解析失败，忽略这条元数据
-            }
+        // 解析 word boundary 元数据 — 兼容多种 Edge TTS 返回格式
+        // 可以出现在 Path:audio.metadata 或 Path:rbsp 消息中
+        if (path === 'audio.metadata' || path === 'rbsp') {
+          const parsed = parseWordBoundary(event.data);
+          if (parsed) {
+            // Offset 和 Duration 单位是百纳秒（100ns ticks），转为秒
+            visemes.push({
+              word: parsed.word,
+              offset: parsed.startMs / 1000,
+              duration: parsed.durMs / 1000,
+            });
           }
         }
       } else if (event.data instanceof ArrayBuffer) {
@@ -297,6 +313,61 @@ function generateFallbackVisemes(text: string, audioBuffer: ArrayBuffer): Viseme
 function estimateAudioDuration(audioBuffer: ArrayBuffer): number {
   const bytesPerSecond = 6000; // 48kbps = 6KB/s
   return audioBuffer.byteLength / bytesPerSecond;
+}
+
+/**
+ * 解析 Edge TTS word boundary 元数据
+ * 兼容嵌套格式（Data.text.Text）、扁平格式（Text/Offset/Duration）
+ * 自动跳过 sentence boundary，只返回 word boundary
+ * 返回 {word, startMs, durMs} 或 null
+ */
+function parseWordBoundary(textMsg: string): { word: string; startMs: number; durMs: number } | null {
+  try {
+    // 在 \\r\\n\\r\\n 之后提取 JSON body
+    const parts = textMsg.split('\r\n\r\n');
+    if (parts.length < 2) return null;
+    const json = JSON.parse(parts[parts.length - 1]);
+
+    // 查找 WordBoundary 条目（支持 Metadata 数组和扁平两种结构）
+    let item = json;
+    if (Array.isArray(json.Metadata)) {
+      item = json.Metadata.find(
+        (m: any) => String(m.Type || m.type || '').toLowerCase() === 'wordboundary'
+      );
+      if (!item) return null;
+    }
+
+    const eventType = String(item.Type || item.type || '').toLowerCase();
+    if (eventType !== 'wordboundary') return null;
+
+    // 跳过 sentence boundary
+    const boundaryType = String(item.Data?.text?.BoundaryType || item.boundaryType || '').toLowerCase();
+    if (boundaryType === 'sentence') return null;
+
+    let word: string, offset: number, duration: number;
+
+    if (item.Data && item.Data.text) {
+      // 嵌套格式: {Data: {Offset, Duration, text: {Text}}}
+      word = item.Data.text.Text || item.Data.text.text || '';
+      offset = item.Data.Offset || 0;
+      duration = item.Data.Duration || 0;
+    } else {
+      // 扁平格式: {Text, Offset, Duration} 或 {text, offset, duration}
+      word = item.Text || item.text || '';
+      offset = item.Offset !== undefined ? item.Offset : (item.offset || 0);
+      duration = item.Duration !== undefined ? item.Duration : (item.duration || 0);
+    }
+
+    if (!word || !word.trim()) return null;
+
+    // 百纳秒（100ns ticks）→ 毫秒
+    const startMs = offset / 10000;
+    const durMs = duration / 10000;
+
+    return { word: word.trim(), startMs, durMs };
+  } catch {
+    return null;
+  }
 }
 
 /**

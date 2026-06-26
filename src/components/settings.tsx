@@ -184,6 +184,33 @@ export const Settings = ({
           <RestreamTokens onTokensUpdate={onTokensUpdate} onChatMessage={onChatMessage} />
           <div className="my-40">
             <div className="my-16 typography-20 font-bold">
+              Lip Sync Offset (ms)
+            </div>
+            <div className="my-16">
+              Adjust how early (negative) or late (positive) the mouth moves relative to audio. Default -120ms feels most natural.
+            </div>
+            <div className="my-8 flex items-center gap-16">
+              <input
+                type="range"
+                min="-300"
+                max="300"
+                step="10"
+                defaultValue={parseInt(localStorage.getItem('lipsyncOffset') || '-120', 10)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  localStorage.setItem('lipsyncOffset', val);
+                  const display = document.getElementById('lipsync-offset-display');
+                  if (display) display.textContent = `${val}ms`;
+                }}
+                className="w-48 h-8 cursor-pointer"
+              />
+              <span id="lipsync-offset-display" className="text-sm font-mono w-48 text-right">
+                {localStorage.getItem('lipsyncOffset') || '-120'}ms
+              </span>
+            </div>
+          </div>
+          <div className="my-40">
+            <div className="my-16 typography-20 font-bold">
               Powered By
             </div>
             <div className="my-8 text-sm text-gray-600">

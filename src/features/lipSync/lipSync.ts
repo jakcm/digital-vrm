@@ -106,8 +106,11 @@ export class LipSync {
     }
     // rawVolume < 0.01 → volume = 0，彻底消除 DC 偏置
 
-    // 使用相对于播放起点的.elapsedTime来匹配 viseme
-    const elapsed = this.audio.currentTime - this._playbackStartTime;
+    // 使用相对于播放起点的elapsedTime来匹配 viseme
+    // 应用唇同步偏移量（从 localStorage 读取，默认 -120ms）
+    // 负值 = 嘴巴提前动（视觉上更自然）
+    const lipsyncOffsetMs = parseInt(localStorage.getItem('lipsyncOffset') || '-120', 10);
+    const elapsed = this.audio.currentTime - this._playbackStartTime - (lipsyncOffsetMs / 1000);
 
     let activeViseme = "sil";
     let activeWeight = 0;

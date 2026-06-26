@@ -171,14 +171,15 @@ export class Model {
 
 /**
  * 将 TTS word boundary 拆成更细的字符级 viseme 片段。
- *
- * Edge TTS 的 WordBoundary 在中文场景常常整句/整词返回；如果直接把一个中文词映射为
- * 单个 viseme，会表现为“开头动一下，后面一直同一个嘴型”。拆成字符级片段后，中文
- * 也能在整段语音中持续变化。
+ * 中文按字符拆分，英文按字符拆分后每个字符独立映射 viseme。
+ * 序列末尾自动添加 trailing silence 确保闭嘴。
  */
 function buildVisemeSequence(visemes: VisemeInfo[]): Array<{ viseme: string; startTime: number; endTime: number }> {
   const sequence = visemes.flatMap((v) => {
-    const chars = Array.from(v.word).filter((char) => char.trim() && !/[。，！？\n.!?\s]/.test(char));
+    const wordStr = v.word.trim();
+    if (!wordStr) return [{ viseme: "sil", startTime: v.offset, endTime: v.offset + v.duration }];
+
+    const chars = Array.from(wordStr).filter((char) => char.trim() && !/[。，！？\n.!?\s]/.test(char));
     if (chars.length === 0) {
       return [{ viseme: "sil", startTime: v.offset, endTime: v.offset + v.duration }];
     }
@@ -206,40 +207,55 @@ function buildVisemeSequence(visemes: VisemeInfo[]): Array<{ viseme: string; sta
 
 /**
  * 将单词映射到 viseme 名称
- * 基于 Oculus 15 viseme 标准
+ * 基于 Oculus 15 viseme 标准 + 扩展音素覆盖
  */
 function mapWordToViseme(word: string): string {
   const char = word.charAt(0);
 
+  // 中文字符 → 基于 unicode 的多样化映射
   if (/^[\u4e00-\u9fff]$/.test(char)) {
     const chineseVisemes = ["aa", "ih", "ou", "ee", "oh"];
-    return chineseVisemes[char.charCodeAt(0) % chineseVisemes.length];
+    const index = (char.charCodeAt(0) + word.length * 7) % chineseVisemes.length;
+    return chineseVisemes[index];
   }
 
   const firstChar = word.charAt(0).toLowerCase();
   const visemeMap: Record<string, string> = {
+    // 元音
     'a': 'aa',
     'e': 'ee',
     'i': 'ih',
     'o': 'oh',
     'u': 'ou',
+    'y': 'ee',
+    'w': 'ou',
+    // 双唇音
     'b': 'PP',
     'p': 'PP',
     'm': 'PP',
+    // 唇齿音
     'f': 'FF',
     'v': 'FF',
+    // 齿龈音
     't': 'DD',
     'd': 'DD',
+    'l': 'nn',
+    'n': 'nn',
+    'r': 'RR',
+    // 软腭音
     'k': 'kk',
     'g': 'kk',
+    // 咝音
     's': 'SS',
     'z': 'SS',
     'c': 'SS',
-    'n': 'nn',
-    'l': 'nn',
-    'r': 'RR',
+    'x': 'SS',
+    'j': 'CH',
+    'q': 'kk',
+    // 喉音/其他
+    'h': 'aa',
   };
-  return visemeMap[firstChar] || "sil";
+  return visemeMap[firstChar] || "aa";
 }
 
 /**

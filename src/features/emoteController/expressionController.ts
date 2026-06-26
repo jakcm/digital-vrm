@@ -80,13 +80,5 @@ export class ExpressionController {
     if (this._autoBlink) {
       this._autoBlink.update(delta);
     }
-
-    if (this._currentLipSync) {
-      const weight =
-        this._currentEmotion === "neutral"
-          ? this._currentLipSync.value * 0.5
-          : this._currentLipSync.value * 0.25;
-      this._expressionManager?.setValue(this._currentLipSync.preset, weight);
-    }
   }
 }
