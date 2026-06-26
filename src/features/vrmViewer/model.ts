@@ -126,24 +126,28 @@ export class Model {
       const { volume, viseme, visemeWeight, visemesActive } = this._lipSync.update();
 
       if (visemesActive) {
-        // viseme 驱动模式：严格按 viseme 序列驱动
+        // viseme 驱动模式：lipSync.update() 已输出平滑插值后的权重
         const weight = visemeWeight ?? 0;
-        if (weight > 0 && viseme && viseme !== "sil") {
+        if (weight > 0.01 && viseme && viseme !== "sil") {
           // 有效 viseme：驱动嘴型
           const vrmViseme = mapToVRMViseme(viseme);
           if (vrmViseme) {
             this.emoteController?.lipSync(vrmViseme as any, weight);
           }
-        } else if (volume > 0.08) {
-          // viseme 间隙但有音量：用音量做微弱平滑（避免突变）
-          this.emoteController?.lipSync("aa" as any, volume * 0.3);
+        } else if (weight > 0.01) {
+          // ⚠️ 修复根因 4：viseme 间隙不再硬重置
+          // lipSync 的平滑滤波器已经在衰减权重，这里只需要驱动到当前值
+          // 不再调用 resetLipSync()，让权重自然衰减到 0
+          const vrmViseme = mapToVRMViseme(viseme || "sil");
+          if (vrmViseme && vrmViseme !== "neutral") {
+            this.emoteController?.lipSync(vrmViseme as any, weight);
+          }
         } else {
-          // viseme 间隙 + 低音量：闭嘴
+          // 权重已衰减到接近 0，安全清零
           this.resetLipSync();
         }
       } else {
         // 音量驱动 fallback（无 viseme 序列时）
-        // 修复后 sigmoid 不会再产生 DC 偏置，volume=0 时此分支会走 resetLipSync()
         if (volume > 0.08) {
           let expression = this.vrm?.expressionManager?.getExpression("JawOpen");
           if (expression) {
@@ -185,7 +189,7 @@ function buildVisemeSequence(visemes: VisemeInfo[]): Array<{ viseme: string; sta
 
     const segmentDuration = v.duration / chars.length;
     return chars.map((char, index) => ({
-      viseme: mapWordToViseme(char),
+      viseme: mapWordToViseme(char, index),
       startTime: v.offset + segmentDuration * index,
       endTime: v.offset + segmentDuration * (index + 1),
     }));
@@ -207,13 +211,20 @@ function buildVisemeSequence(visemes: VisemeInfo[]): Array<{ viseme: string; sta
 /**
  * 将单词映射到 viseme 名称
  * 基于 Oculus 15 viseme 标准
+ *
+ * ⚠️ 修复根因 6：优化中文 viseme 映射多样性
+ * 旧代码用 charCodeAt(0) % 5，连续汉字容易映射到相同元音
+ * 新代码加入字符在词中位置作为扰动，使连续字符更倾向于交替映射
  */
-function mapWordToViseme(word: string): string {
+function mapWordToViseme(word: string, charIndex: number = 0): string {
   const char = word.charAt(0);
 
   if (/^[\u4e00-\u9fff]$/.test(char)) {
     const chineseVisemes = ["aa", "ih", "ou", "ee", "oh"];
-    return chineseVisemes[char.charCodeAt(0) % chineseVisemes.length];
+    // 使用 charIndex 作为扰动，使连续汉字交替映射到不同元音
+    const code = char.charCodeAt(0);
+    const idx = (code + charIndex * 3) % chineseVisemes.length;
+    return chineseVisemes[idx];
   }
 
   const firstChar = word.charAt(0).toLowerCase();

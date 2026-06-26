@@ -52,14 +52,16 @@ export class ExpressionController {
 
   public lipSync(preset: VRMExpressionPresetName, value: number) {
     // 立即清除旧值
-    if (this._currentLipSync) {
+    if (this._currentLipSync && this._currentLipSync.preset !== preset) {
       this._expressionManager?.setValue(this._currentLipSync.preset, 0);
     }
-    // 立即应用新值（不等到 update()），确保每一帧 blend shape 实时更新
+    // ⚠️ 修复根因 1：权重缩减过于激进
+    // 旧值：neutral=0.5, emotional=0.25 → 嘴型几乎看不见
+    // 新值：参照 digital-human 项目的 0.82 峰值权重，大幅提高嘴型张合幅度
     const weight =
       this._currentEmotion === "neutral"
-        ? value * 0.5
-        : value * 0.25;
+        ? value * 0.85
+        : value * 0.65;
     this._expressionManager?.setValue(preset, weight);
     this._currentLipSync = {
       preset,
